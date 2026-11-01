@@ -81,16 +81,16 @@ PadState read_keyboard() {
     auto key = [&](SDL_Scancode sc, uint16_t mask) {
         if (k[sc]) s.buttons |= mask;
     };
-    key(SDL_SCANCODE_X, BTN_A);
-    key(SDL_SCANCODE_C, BTN_B);
-    key(SDL_SCANCODE_Z, BTN_Z);
+    key(SDL_SCANCODE_F, BTN_A);
+    key(SDL_SCANCODE_R, BTN_B);
+    key(SDL_SCANCODE_SPACE, BTN_Z);
     key(SDL_SCANCODE_RETURN, BTN_START);
-    key(SDL_SCANCODE_LSHIFT, BTN_L);
-    key(SDL_SCANCODE_SPACE, BTN_R);
-    key(SDL_SCANCODE_I, BTN_CU);
-    key(SDL_SCANCODE_K, BTN_CD);
-    key(SDL_SCANCODE_J, BTN_CL);
-    key(SDL_SCANCODE_L, BTN_CR);
+    key(SDL_SCANCODE_Q, BTN_L);
+    key(SDL_SCANCODE_E, BTN_R);
+    key(SDL_SCANCODE_Y, BTN_CU);
+    key(SDL_SCANCODE_G, BTN_CD);
+    key(SDL_SCANCODE_T, BTN_CL);
+    key(SDL_SCANCODE_H, BTN_CR);
     key(SDL_SCANCODE_UP, BTN_DU);
     key(SDL_SCANCODE_DOWN, BTN_DD);
     key(SDL_SCANCODE_LEFT, BTN_DL);

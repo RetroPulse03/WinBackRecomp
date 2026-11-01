@@ -19,7 +19,7 @@ How it got here: all ~2,086 functions recompile with no hand edits. The game-spe
 1. Put your ROM next to `WinBackRecompiled.exe` (or run it once with `--rom <path>`). The ROM is checked and stored in `%APPDATA%\WinBackRecompiled`, so you only do this once.
 2. Run `WinBackRecompiled.exe`. Options: `--fullscreen`, `--developer` (RT64 debug UI). Toggle fullscreen with F11 or Alt+Enter.
 
-**Controls.** Keyboard (player 1): WASD = stick, arrows = D-pad, X = A, C = B, Z = Z, Space = R, Left Shift = L, I/J/K/L = C-buttons, Enter = Start. Gamepad: left stick, A = A, X = B, B = C-down, Y = C-left, LB = L, RB/RT = R, LT = Z, right stick = C-buttons, Start. Players 2–4 use more gamepads.
+**Controls.** Keyboard (player 1): WASD = stick, F = A, R = B, Space = Z, Q = L, E = R, Y/T/G/H = C-up/left/down/right, arrows = D-pad, Enter = Start. Gamepad: left stick, A = A, X = B, B = C-down, Y = C-left, LB = L, RB/RT = R, LT = Z, right stick = C-buttons, Start. Players 2–4 use more gamepads.
 
 Saves go to the emulated Controller Pak: `%APPDATA%\WinBackRecompiled\saves\controller_pak_1.bin`.
 
