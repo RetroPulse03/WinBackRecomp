@@ -32,6 +32,8 @@ powershell -ExecutionPolicy Bypass -File tools\package.ps1   # dist/WinBackRecom
 - Python tools run from `.venv` (splat64 0.50.1, xxhash, pyyaml) with `python -I`.
 - If linking fails with "permission denied", a previous `WinBackRecompiled.exe` is still running.
 
+- The icon is drawn in `src/main/icon/icon.svg`. After changing it, run `sh tools/make_icon.sh` (ImageMagick 7) to rebuild `icon.ico` and the GitHub social preview `docs/images/social_preview.png`. Upload the preview by hand in the repository's Settings.
+
 ### Build options
 
 | Option | Default | Effect |

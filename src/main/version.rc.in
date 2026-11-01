@@ -1,6 +1,9 @@
 // Windows version resource, configured by CMake from project(VERSION).
 #include <winver.h>
 
+// First icon in the exe: Explorer, the taskbar and SDL's window class use it.
+1 ICON "@CMAKE_SOURCE_DIR@/src/main/icon/icon.ico"
+
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
 PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0

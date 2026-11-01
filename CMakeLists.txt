@@ -148,6 +148,8 @@ if (WIN32)
     # window); WINBACK_CONSOLE=ON keeps the console for debugging.
     configure_file(src/main/version.rc.in ${CMAKE_BINARY_DIR}/version.rc @ONLY)
     target_sources(WinBackRecompiled PRIVATE ${CMAKE_BINARY_DIR}/version.rc)
+    set_source_files_properties(${CMAKE_BINARY_DIR}/version.rc PROPERTIES
+        OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/src/main/icon/icon.ico)
     option(WINBACK_CONSOLE "Build with a console window" OFF)
     if (NOT WINBACK_CONSOLE)
         set_target_properties(WinBackRecompiled PROPERTIES WIN32_EXECUTABLE TRUE)
