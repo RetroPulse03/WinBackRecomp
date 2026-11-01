@@ -1,6 +1,6 @@
 #pragma once
 
-// N64Recomp trace mode hooks (trace_mode = true in winback.us.toml).
+// N64Recomp trace mode hooks (trace_mode = true in config/winback.us.toml).
 // Records the functions each game thread entered most recently; printed by
 // the debug stats thread under WINBACK_DEBUG.
 

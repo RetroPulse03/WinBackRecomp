@@ -1,5 +1,5 @@
 // Hand-written replacements for recompiled functions (listed under
-// [patches] ignored in winback.us.toml).
+// [patches] ignored in config/winback.us.toml).
 
 #include "recomp.h"
 

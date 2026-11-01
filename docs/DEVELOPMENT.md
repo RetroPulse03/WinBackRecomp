@@ -6,27 +6,27 @@ Technical notes for working on WinBack Recompiled. [README.md](../README.md) cov
 
 The ROM is turned into a native executable in these stages:
 
-1. **splat** splits the ROM (`winback.us.yaml`) and disassembles the code segment.
+1. **splat** splits the ROM (`rom/baserom.us.z64`, configured by `config/winback.us.yaml`) and disassembles the code segment.
 2. **`tools/sigmatch.py`** names libultra, libc, n_audio and libmus functions using n64sym signatures.
 3. **`tools/gen_recomp_syms.py`** writes the N64Recomp symbol file.
-4. **N64Recomp** writes `RecompiledFuncs/` and **RSPRecomp** writes `rsp/aspMain.cpp` (audio microcode).
+4. **N64Recomp** writes `generated/RecompiledFuncs/` and **RSPRecomp** writes `generated/rsp/aspMain.cpp` (audio microcode).
 5. The output is compiled with **N64ModernRuntime** and rendered by **RT64**.
 
-ROM-derived files are never committed. `.gitignore` excludes the ROM, `asm/`, `RecompiledFuncs/`, `rsp/`, the generated symbol and linker files, `deps/`, `build/` and `dist/`.
+Hand-written inputs live in `config/`. Everything derived from the ROM goes to `generated/` (asm, symbols, recompiled C, logs and test screenshots) and is never committed. `.gitignore` excludes `rom/`, `generated/`, `deps/`, `build/` and `dist/`. Paths in the config files are relative to the file itself.
 
 ## Common commands
 
 Run these from the repository root.
 
 ```
-sh tools/regen.sh                         # ROM -> asm, symbols, RecompiledFuncs, rsp/aspMain.cpp
+sh tools/regen.sh                         # rom/ -> generated/ (asm, symbols, RecompiledFuncs, rsp)
 tools\vsenv.cmd cmake --build build       # incremental build
 build\WinBackRecompiled.exe --console     # run with log output
 powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Shots 4
 powershell -ExecutionPolicy Bypass -File tools\package.ps1   # dist/WinBackRecompiled-v<version>-Windows-x64.zip
 ```
 
-- Re-run `regen.sh` after changing `symbol_addrs.txt`, `winback.us.toml`, `winback.us.yaml` or the generators, then rebuild. CMake globs `RecompiledFuncs/`, so re-configure if the number of files changes.
+- Re-run `regen.sh` after changing anything in `config/` or the generators, then rebuild. Logs go to `generated/logs/`. CMake globs `generated/RecompiledFuncs/`, so re-configure if the number of files changes.
 - `tools\vsenv.cmd` loads the Visual Studio environment and puts LLVM on `PATH`. The toolchain is clang-cl with Ninja.
 - Python tools run from `.venv` (splat64 0.50.1, xxhash, pyyaml) with `python -I`.
 - If linking fails with "permission denied", a previous `WinBackRecompiled.exe` is still running.
@@ -37,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File tools\package.ps1   # dist/WinBackRecom
 |---|---|---|
 | `WINBACK_CONSOLE` | `OFF` | Build with the console subsystem. Otherwise use `--console` or set `WINBACK_DEBUG` to get a console at runtime. |
 | `WINBACK_VERSION_SUFFIX` | empty | Appended to the version (e.g. `-dev`). The version itself comes from `project(VERSION)` in `CMakeLists.txt`. |
-| `trace_mode` in `winback.us.toml` | `false` | Records each thread's recent function calls for `WINBACK_DEBUG` dumps. It costs performance, so it stays off in releases. |
+| `trace_mode` in `config/winback.us.toml` | `false` | Records each thread's recent function calls for `WINBACK_DEBUG` dumps. It costs performance, so it stays off in releases. |
 
 ## Debugging
 
@@ -70,7 +70,7 @@ ultramodern switches game threads only inside libultra calls. VI/SP/DP messages 
 
 ### Library function names
 
-N64Recomp replaces libultra functions by name (`deps/N64Recomp/src/symbol_lists.cpp`). If a libultra function is missed or misnamed, the original MIPS code runs and touches hardware registers. Some functions differ only by relocations, so signatures can't tell them apart. Name those by hand in `symbol_addrs.txt` (for example `osViGetNextFramebuffer`).
+N64Recomp replaces libultra functions by name (`deps/N64Recomp/src/symbol_lists.cpp`). If a libultra function is missed or misnamed, the original MIPS code runs and touches hardware registers. Some functions differ only by relocations, so signatures can't tell them apart. Name those by hand in `config/symbol_addrs.txt` (for example `osViGetNextFramebuffer`).
 
 ### GCC tail merging
 
@@ -80,7 +80,7 @@ N64Recomp replaces libultra functions by name (`deps/N64Recomp/src/symbol_lists.
 
 ### Audio microcode
 
-The game uses the audio microcode at ROM `0xDAD50`, size `0xC60` (`aspMain.us.toml`). The copy at `0xD9F30` is unused. Missing indirect jump targets go in `extra_indirect_branch_targets`.
+The game uses the audio microcode at ROM `0xDAD50`, size `0xC60` (`config/aspMain.us.toml`). The copy at `0xD9F30` is unused. Missing indirect jump targets go in `extra_indirect_branch_targets`.
 
 ### Saves
 

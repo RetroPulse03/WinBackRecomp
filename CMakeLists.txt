@@ -4,8 +4,8 @@ set(WINBACK_VERSION_SUFFIX "" CACHE STRING "Appended to the version, e.g. -dev")
 
 # WinBack: Covert Operations (USA) - static recompilation for PC.
 #
-#   RecompiledFuncs/  N64Recomp output (generated from the ROM by tools/regen.sh)
-#   rsp/aspMain.cpp   RSPRecomp output (audio microcode)
+#   generated/RecompiledFuncs/  N64Recomp output (generated from the ROM by tools/regen.sh)
+#   generated/rsp/aspMain.cpp   RSPRecomp output (audio microcode)
 #   src/game/         game registration and patches
 #   src/main/         host app: SDL window, RT64, audio, input
 #
@@ -69,12 +69,12 @@ list(FILTER LIBRECOMP_SRCS EXCLUDE REGEX "src/pak\.cpp$")
 set_property(TARGET librecomp PROPERTY SOURCES ${LIBRECOMP_SRCS})
 
 # --- Game library: recompiled code + glue ----------------------------------
-file(GLOB WINBACK_FUNC_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/funcs_*.c)
+file(GLOB WINBACK_FUNC_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/generated/RecompiledFuncs/funcs_*.c)
 
 add_library(WinBackGame STATIC
     ${WINBACK_FUNC_SRCS}
-    RecompiledFuncs/lookup.cpp
-    rsp/aspMain.cpp
+    generated/RecompiledFuncs/lookup.cpp
+    generated/rsp/aspMain.cpp
     src/game/winback_game.cpp
     src/game/controller_pak.cpp
     src/game/debug_stats.cpp
@@ -82,7 +82,7 @@ add_library(WinBackGame STATIC
 )
 target_include_directories(WinBackGame PUBLIC
     ${CMAKE_SOURCE_DIR}/src/game
-    ${CMAKE_SOURCE_DIR}/RecompiledFuncs
+    ${CMAKE_SOURCE_DIR}/generated/RecompiledFuncs
     ${DEPS}/N64ModernRuntime/N64Recomp/include
 )
 target_link_libraries(WinBackGame PUBLIC librecomp ultramodern)
@@ -96,7 +96,7 @@ if (MSVC)
 endif()
 # The recompiled RSP vector unit uses SSE4.1 intrinsics.
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    set_source_files_properties(rsp/aspMain.cpp PROPERTIES COMPILE_OPTIONS "-msse4.1")
+    set_source_files_properties(generated/rsp/aspMain.cpp PROPERTIES COMPILE_OPTIONS "-msse4.1")
 endif()
 
 # --- Executable ------------------------------------------------------------

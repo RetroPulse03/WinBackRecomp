@@ -3,22 +3,12 @@
 *.n64
 *.v64
 rom/
-asm/
-assets/
-RecompiledFuncs/
-rsp/
-winback.us.ld
-winback.us.syms.toml
-symbol_addrs.libultra*.txt
-build_decomp/
-src_decomp/
+generated/
 
 # Tools, dependencies and build output
 .venv/
 deps/
 build/
-*.log
-setup_status.txt
-captures/
 dist/
+*.log
 CLAUDE.local.md

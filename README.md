@@ -59,7 +59,7 @@ python -m venv .venv
 sh tools/fetch_deps.sh
 ```
 
-Build `deps/N64Recomp` using the commands in the header of `tools/fetch_deps.sh`. Then put the ROM in the repository root as `baserom.us.z64` and run:
+Build `deps/N64Recomp` using the commands in the header of `tools/fetch_deps.sh`. Then put the ROM in `rom/` as `baserom.us.z64` and run:
 
 ```
 sh tools/regen.sh
@@ -67,21 +67,24 @@ tools\vsenv.cmd cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE
 tools\vsenv.cmd cmake --build build
 ```
 
-`tools/regen.sh` generates all game-specific code from your ROM. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [docs/ROM_MAP.md](docs/ROM_MAP.md) describes the ROM layout.
+`tools/regen.sh` generates all game-specific code from your ROM into `generated/`. The game is built as `build/WinBackRecompiled.exe`, and `tools/package.ps1` packages it into `dist/`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [docs/ROM_MAP.md](docs/ROM_MAP.md) describes the ROM layout.
 
 ## Project layout
 
 | Path | Contents |
 |---|---|
-| `winback.us.yaml` | splat configuration |
-| `symbol_addrs.txt` | Hand-maintained symbol names |
-| `winback.us.toml` | N64Recomp configuration (stubs, replaced functions, hooks) |
-| `aspMain.us.toml` | RSPRecomp configuration (audio microcode) |
-| `recomplauncher.json` | Launcher manifest shipped in the release zip |
+| `config/winback.us.yaml` | splat configuration |
+| `config/symbol_addrs.txt` | Hand-maintained symbol names |
+| `config/winback.us.toml` | N64Recomp configuration (stubs, replaced functions, hooks) |
+| `config/aspMain.us.toml` | RSPRecomp configuration (audio microcode) |
 | `src/game/` | Game registration, patches and Controller Pak |
 | `src/main/` | Host application: window, renderer, audio, input |
 | `patches/` | Patches applied to dependencies |
 | `tools/` | Code generators and build helpers |
+| `docs/` | Development notes and ROM map |
+| `recomplauncher.json` | Launcher manifest shipped in the release zip |
+
+These folders are created locally and never committed: `rom/` (your ROM), `generated/` (everything produced from the ROM, plus logs and screenshots), `deps/`, `build/` and `dist/` (release zips).
 
 ## Pinned versions
 

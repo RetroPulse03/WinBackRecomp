@@ -6,8 +6,8 @@
 text_offset = 0xDAD50
 text_size = 0xC60
 text_address = 0x04001080
-rom_file_path = "baserom.us.z64"
-output_file_path = "rsp/aspMain.cpp"
+rom_file_path = "../rom/baserom.us.z64"
+output_file_path = "../generated/rsp/aspMain.cpp"
 output_function_name = "aspMain"
 # Command jump table: halfwords at DMEM 0x0 (ucode data + 0). The RSP PC is
 # 12 bits, so entry 14 (0x02B0) is IMEM 0x12B0; entries 7 and 8 are 0

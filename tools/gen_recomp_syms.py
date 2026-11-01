@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build N64Recomp's symbol file (winback.us.syms.toml) from splat's asm.
+"""Build N64Recomp's symbol file (generated/winback.us.syms.toml) from splat's asm.
 
 WinBack is a single statically linked segment, so this writes one [[section]]
 covering the CPU text (ROM 0x1000 up to rspboot) with every function splat
@@ -15,7 +15,7 @@ import sys
 TEXT_ROM_START = 0x1000
 TEXT_ROM_END = 0xD9E60  # rspboot starts here
 TEXT_VRAM = 0x80025C00
-ROM_PATH = "baserom.us.z64"
+ROM_PATH = "rom/baserom.us.z64"
 
 
 def skipped_names():
@@ -27,7 +27,7 @@ def skipped_names():
         names |= set(re.findall(r'"(\w+)"', src[:src.index("renamed_funcs {")]))
     except OSError:
         pass
-    m = re.search(r"ignored\s*=\s*\[(.*?)\]", open("winback.us.toml").read(), re.S)
+    m = re.search(r"ignored\s*=\s*\[(.*?)\]", open("config/winback.us.toml").read(), re.S)
     if m:
         names |= set(re.findall(r'"(\w+)"', m.group(1)))
     return names
@@ -130,8 +130,8 @@ def add_branch_entries(funcs, rom):
 
 
 def main():
-    asm_dir = sys.argv[1] if len(sys.argv) > 1 else "asm"
-    out_path = sys.argv[2] if len(sys.argv) > 2 else "winback.us.syms.toml"
+    asm_dir = sys.argv[1] if len(sys.argv) > 1 else "generated/asm"
+    out_path = sys.argv[2] if len(sys.argv) > 2 else "generated/winback.us.syms.toml"
 
     funcs = []  # (vram, name, size)
     for path in glob.glob(f"{asm_dir}/**/*.s", recursive=True):

@@ -1,10 +1,10 @@
 # Runs the game for a while and saves screenshots of its window.
-# Usage: powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 [-Seconds 30] [-Shots 3] [-Out captures]
+# Usage: powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 [-Seconds 30] [-Shots 3] [-Out generated\captures]
 # Set WINBACK_AUTOPRESS (see src/main/input.cpp) for scripted input.
 param(
     [int]$Seconds = 30,
     [int]$Shots = 3,
-    [string]$Out = "captures",
+    [string]$Out = "generated\captures",
     [string]$Exe = "build\WinBackRecompiled.exe"
 )
 
@@ -22,7 +22,7 @@ public static class Win {
 [Win]::SetProcessDPIAware() | Out-Null
 
 New-Item -ItemType Directory -Force $Out | Out-Null
-$proc = Start-Process -FilePath $Exe -ArgumentList "--rom", "baserom.us.z64" -PassThru `
+$proc = Start-Process -FilePath $Exe -ArgumentList "--rom", "romaserom.us.z64" -PassThru `
     -RedirectStandardOutput "$Out\stdout.log" -RedirectStandardError "$Out\stderr.log"
 
 $interval = [math]::Max(1, [int]($Seconds / $Shots))

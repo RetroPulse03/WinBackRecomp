@@ -17,7 +17,7 @@ LABEL = re.compile(r"\s*\.L([0-9A-F]{8}):")
 
 
 def main():
-    asm_dir = sys.argv[1] if len(sys.argv) > 1 else "asm"
+    asm_dir = sys.argv[1] if len(sys.argv) > 1 else "generated/asm"
     for path in sorted(glob.glob(f"{asm_dir}/**/*.s", recursive=True)):
         func = None
         insns = []  # (vram, op, args)

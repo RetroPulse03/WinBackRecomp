@@ -2,22 +2,24 @@ name: WinBack - Covert Operations (USA)
 sha1: fa04477b321a95e1f7a2edcac5c09bfa6ef72041
 options:
   basename: winback
-  target_path: baserom.us.z64
-  base_path: .
+  target_path: rom/baserom.us.z64
+  base_path: ..
   platform: n64
   compiler: IDO
   find_file_boundaries: True
   header_encoding: ASCII
-  asm_path: asm
-  src_path: src_decomp
-  build_path: build_decomp
-  ld_script_path: winback.us.ld
+  asm_path: generated/asm
+  asset_path: generated/assets
+  src_path: generated/src_decomp
+  build_path: generated/splat_build
+  ld_script_path: generated/winback.us.ld
   symbol_addrs_path:
-    - symbol_addrs.txt
-    - symbol_addrs.libultra.txt
-  undefined_funcs_auto_path: build_decomp/undefined_funcs_auto.txt
-  undefined_syms_auto_path: build_decomp/undefined_syms_auto.txt
+    - config/symbol_addrs.txt
+    - generated/symbol_addrs.libultra.txt
+  undefined_funcs_auto_path: generated/splat_build/undefined_funcs_auto.txt
+  undefined_syms_auto_path: generated/splat_build/undefined_syms_auto.txt
   asm_inc_header: ""
+  generated_asm_macros_directory: generated/include
   create_undefined_funcs_auto: False
   create_undefined_syms_auto: False
   disasm_unknown: True
