@@ -127,7 +127,11 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 ## Roadmap
 
-1. **Soak testing:** longer sessions through more missions, menus, game over and cutscenes, patching new spin loops. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-2. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
-3. **Mods:** a RecompModTool template and SDK headers (mod game id `winback`), a settings menu, then widescreen, split-screen and custom characters.
-4. **Linux build.**
+1. **Recomp menu and Level Select:** the Select button opens an overlay menu at any time (RmlUi, in the style of the other N64Recomp projects; the game still boots straight into its own title screen). The first entry is Level Select: pick a stage, then one of its checkpoints, and the game jumps there. This makes every later test start where it's needed.
+2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
+3. **Settings:** controls (Classic/Modern, remapping), graphics (including the graphics API), audio, added to the same menu.
+4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
+5. **Mods:** a RecompModTool template and SDK headers (mod game id `winback`), then widescreen, split-screen and custom characters.
+6. **Linux build.**
+
+The long-term goal for the menu is to move its options into rebuilt in-game menus that match the game's own style.

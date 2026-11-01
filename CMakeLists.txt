@@ -78,6 +78,7 @@ add_library(WinBackGame STATIC
     src/game/winback_game.cpp
     src/game/controller_pak.cpp
     src/game/debug_stats.cpp
+    src/game/level_select.cpp
     src/game/patches.c
 )
 target_include_directories(WinBackGame PUBLIC

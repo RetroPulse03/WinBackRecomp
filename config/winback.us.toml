@@ -69,3 +69,28 @@ text = "{ extern int winback_take_rear_snap(int); if (winback_take_rear_snap(MEM
 func = "func_80025D94"
 before_vram = 0x80025EE0
 text = "{ extern void yield_self_1ms(uint8_t*); yield_self_1ms(rdram); }"
+
+# --- Level Select (src/game/level_select.cpp) ------------------------------
+
+# Front end and gameplay frame callbacks: jumps requested from the menu run here.
+[[patches.hook]]
+func = "func_80073600"
+before_vram = 0x80073600
+text = "{ extern void winback_level_frame(uint8_t*, recomp_context*, int); winback_level_frame(rdram, ctx, 0); }"
+
+[[patches.hook]]
+func = "func_8004BA40"
+before_vram = 0x8004BA40
+text = "{ extern void winback_level_frame(uint8_t*, recomp_context*, int); winback_level_frame(rdram, ctx, 1); }"
+
+# Stage init, right after the stage start snapshot (func_8009C8E0).
+[[patches.hook]]
+func = "func_8004BD7C"
+before_vram = 0x8004C070
+text = "{ extern void winback_stage_snapshot(uint8_t*); winback_stage_snapshot(rdram); }"
+
+# Script checkpoint command, right after it saves the snapshot.
+[[patches.hook]]
+func = "func_8009AA9C"
+before_vram = 0x8009BB08
+text = "{ extern void winback_checkpoint_reached(void); winback_checkpoint_reached(); }"
