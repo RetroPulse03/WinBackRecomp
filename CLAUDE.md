@@ -10,7 +10,7 @@ Static recompilation of *WinBack: Covert Operations* (N64, USA) to a native Wind
 
 ## Current state (2026-11-01)
 
-- Boots through the intros, title screen and Controller Pak save into the first mission at 60 fps. Only scripted runs of 45 seconds or less have been tested.
+- Boots through the intros, title screen and Controller Pak save into the first mission at 60 fps. The user has play-tested mission 1 by hand, and aiming with the laser sight works (Vulkan). Scripted runs of 48 seconds or less have also been tested.
 - Public repo: https://github.com/RetroPulse03/WinBackRecomp (branch `main`). `gh` is installed at `C:/Program Files/GitHub CLI/gh.exe` and logged in. Commit only as RetroPulse with the noreply email already set in .git/config.
 - The working tree is ready to regenerate and build (`baserom.us.z64` is in the root, and the `deps/` and `build/` trees are already built).
 
@@ -46,7 +46,7 @@ powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Sho
   - Renderer decision (2026-11-01): stay on RT64 (enhancements, widescreen/mod support, N64Recomp ecosystem) and treat ParaLLEl-RDP as ground truth. Option on the table if RT64 patches keep piling up: a developer-only build mode that runs the real F3DEX2 ucode through RSPRecomp and renders with ParaLLEl-RDP for side-by-side checks (or, as a last resort, as the renderer). RT64's CONTRIBUTING.md bans AI-generated contributions, so fixes stay as local patches; the user may file plain bug reports.
   - `patches/rt64/0001-f3dex2-stateful-texrect.patch`: in F3DEX2, `G_TEXRECT` only stores its words and `G_RDPHALF_2` sends the rectangle. WinBack writes a 16-byte RDP-form texrect before the sky cloud plane to load its TMEM; RT64 used to draw it (the grey square) and swallow the following `G_MTX` (no clouds).
   - `patches/rt64/0002-l3dex2-line3d.patch`: the laser sight is drawn with L3DEX2 2.08 (text ROM 0xDCD40, data 0xF08B0) `G_LINE3D`, which RT64 left as a stub. The line is drawn as a screen-space quad built the way the microcode builds its RDP primitive (handler at IMEM 0x1618). Width is `(w0 & 0xFF) + 3` quarter pixels on each side: horizontal for steep lines, vertical with square ends for shallow ones. Lines ignore culling. L3DEX2 TRI1/TRI2 draw wireframes.
-- **AMD D3D12 driver crash.** On the user's AMD GPU (amdxc64.dll 32.0.32015.7029), the D3D12 backend crashes in the driver's shader compiler (thread "RT64 Shader") when the laser's pipeline is first compiled. Vulkan (`WINBACK_GFX_API=vulkan`) runs fine. lldb is at `C:\Program Files\LLVM\bin\lldb.exe` for backtraces.
+- **Graphics backend: Vulkan on every platform** (`src/main/main.cpp`, user decision 2026-11-01: the port should be platform agnostic). RT64's Auto would pick D3D12 on Windows. `WINBACK_GFX_API=d3d12` forces D3D12 for testing. On the user's AMD GPU (amdxc64.dll 32.0.32015.7029), D3D12 crashes in the driver's shader compiler (thread "RT64 Shader") the first time the laser's pipeline compiles. A graphics-API option belongs in the future settings menu. lldb is at `C:\Program Files\LLVM\bin\lldb.exe` for backtraces.
 - **Saves.** The Controller Pak is ours (`src/game/controller_pak.cpp`), stored in `%APPDATA%\WinBackRecompiled\saves\`. librecomp's `pak.cpp` is removed from the build in CMakeLists.txt.
 
 ## Toolchain quirks on this machine
