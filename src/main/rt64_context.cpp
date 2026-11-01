@@ -39,6 +39,87 @@ unsigned int DPC_TMEM_REG = 0;
 
 void check_interrupts_stub() {}
 
+// WINBACK_DLDUMP: logs every fill/texture rectangle of at least 32x32 pixels
+// with the RDP state it is drawn with, for chasing render bugs. Walks the
+// F3DEX2 display list itself; RT64 is unaffected.
+void dump_rects(const uint8_t* rdram, uint32_t dl) {
+    static const bool enabled = std::getenv("WINBACK_DLDUMP") != nullptr;
+    static uint32_t frame = 0;
+    if (!enabled) {
+        return;
+    }
+    frame++;
+    auto word = [rdram](uint32_t addr) { return *reinterpret_cast<const uint32_t*>(rdram + (addr & 0x3FFFFFC)); };
+    uint32_t segments[16] = {};
+    auto resolve = [&segments](uint32_t addr) { return segments[(addr >> 24) & 0xF] + (addr & 0xFFFFFF); };
+    uint32_t stack[18];
+    int depth = 0;
+    uint32_t combine0 = 0, combine1 = 0, omh = 0, oml = 0, timg0 = 0, timg1 = 0, prim = 0, env = 0, fill = 0;
+    for (int guard = 0; guard < 200000; guard++) {
+        uint32_t w0 = word(dl), w1 = word(dl + 4);
+        uint8_t op = w0 >> 24;
+        dl += 8;
+        switch (op) {
+            case 0xDE: // G_DL
+                if (((w0 >> 16) & 0xFF) == 0 && depth < 18) {
+                    stack[depth++] = dl;
+                }
+                dl = resolve(w1);
+                break;
+            case 0xDF: // G_ENDDL
+                if (depth == 0) {
+                    return;
+                }
+                dl = stack[--depth];
+                break;
+            case 0xDB: // G_MOVEWORD
+                if (((w0 >> 16) & 0xFF) == 0x06) {
+                    segments[((w0 & 0xFFFF) / 4) & 0xF] = w1 & 0xFFFFFF;
+                }
+                break;
+            case 0xE2: case 0xE3: { // G_SETOTHERMODE_L / _H
+                uint32_t len = (w0 & 0xFF) + 1;
+                uint32_t shift = 32 - ((w0 >> 8) & 0xFF) - len;
+                uint32_t mask = (len >= 32 ? 0xFFFFFFFFu : ((1u << len) - 1)) << shift;
+                uint32_t& om = op == 0xE2 ? oml : omh;
+                om = (om & ~mask) | (w1 & mask);
+                break;
+            }
+            case 0xEF: omh = w0 & 0xFFFFFF; oml = w1; break; // G_RDPSETOTHERMODE
+            case 0xFC: combine0 = w0; combine1 = w1; break;
+            case 0xFD: timg0 = w0; timg1 = resolve(w1); break;
+            case 0xFA: prim = w1; break;
+            case 0xFB: env = w1; break;
+            case 0xF7: fill = w1; break;
+            case 0xF5: case 0xF3: case 0xF2: case 0xF4: case 0xF0: // tile setup, loads
+                if (std::getenv("WINBACK_DLDUMP_TILES") != nullptr && prim == 0x404040FF) {
+                    std::fprintf(stderr, "[dl %u]   %02X %08X %08X\n", frame, op, w0, w1);
+                }
+                break;
+            case 0xE4: case 0xF6: { // G_TEXRECT / G_FILLRECT
+                uint32_t x1 = (w0 >> 12) & 0xFFF, y1 = w0 & 0xFFF;
+                uint32_t x0 = (w1 >> 12) & 0xFFF, y0 = w1 & 0xFFF;
+                if (op == 0xE4) {
+                    dl += 16; // G_RDPHALF_1 + G_RDPHALF_2
+                }
+                if (x1 - x0 >= 32 * 4 && y1 - y0 >= 32 * 4) {
+                    std::fprintf(stderr, "[dl %u] %s (%u,%u)-(%u,%u) cc %08X %08X om %08X %08X timg %08X %08X prim %08X env %08X fill %08X\n",
+                        frame, op == 0xE4 ? "TEXRECT" : "FILLRECT", x0 / 4, y0 / 4, x1 / 4, y1 / 4,
+                        combine0, combine1, omh, oml, timg0, timg1, prim, env, fill);
+                    static bool dumped = false;
+                    if (!dumped && std::getenv("WINBACK_DLDUMP_TILES") != nullptr && prim == 0x404040FF) {
+                        dumped = true;
+                        for (uint32_t i = 0; i < 0x800; i += 4) {
+                            std::fprintf(stderr, "%08X%s", word(timg1 + i), (i & 0x1F) == 0x1C ? "\n" : " ");
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+}
+
 using UC = RT64::UserConfiguration;
 namespace R = ultramodern::renderer;
 
@@ -198,6 +279,7 @@ public:
 
     void send_dl(const OSTask* task) override {
         winback::stats::gfx_tasks++;
+        dump_rects(app->core.RDRAM, task->t.data_ptr & 0x3FFFFFF);
         app->state->rsp->reset();
         app->interpreter->loadUCodeGBI(task->t.ucode & 0x3FFFFFF, task->t.ucode_data & 0x3FFFFFF, true);
         app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & 0x3FFFFFF, 0, true);

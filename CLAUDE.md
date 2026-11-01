@@ -26,6 +26,8 @@ powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Sho
 - Fresh machine: run `sh tools/fetch_deps.sh`, build N64Recomp (the commands are in that script's header), then follow README.md "Building".
 - Scripted input for unattended runs: `WINBACK_AUTOPRESS=start@6,a@10,...`. The sequence used to reach the first mission (with the pause menu at the end) was `start@6,start@9,start@12,a@14,a@16,start@18,a@20,a@23,a@26,start@30,a@33,a@36`.
 - `WINBACK_WATCH=8011xxxx,...` adds memory words to the debug dump that prints every 5 seconds.
+- `WINBACK_DLDUMP=1` logs every fill/texture rect of 32x32 or more with its combiner, other modes and texture (stderr). It found the cloud-shadow overlay; extend `dump_rects` in `src/main/rt64_context.cpp` for other render bugs.
+- Test runs that `Stop-Process` the game look like crashes to the user; say so before launching one.
 - Re-run `regen.sh` after changing `symbol_addrs.txt`, `winback.us.toml`, `winback.us.yaml` or the generators. Then rebuild; CMake globs RecompiledFuncs, so re-configure if the file count changes.
 
 ## How the runtime bites (read before debugging a hang)
@@ -55,12 +57,11 @@ powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Sho
 
 ## Roadmap (do in order unless the user redirects)
 
-1. **Grey square behind the "GO INTO MISSION!" banner.** This is an RT64 render bug. Try `--developer` for RT64's debugger and inspect the draw calls; likely a fill/copy-mode rect or a framebuffer effect.
-2. **Soak tests.** Run longer autopress sessions through more missions, menus, game over and the cutscenes, and patch any new spin loops. Check audio (pitch/stereo; `audio.cpp` swaps the channels).
-3. **Release build settings.** Set `trace_mode = false` in `winback.us.toml` (it costs performance), use the WIN32 subsystem for Release (keep a console in debug builds), and add an icon and version info.
-4. **Packaging.** Produce a zip with the exe, SDL2.dll, dxil.dll, dxcompiler.dll, README and license.
-5. **GitHub.** This needs the user: they create the repo or install `gh`.
+1. **Soak tests.** Run longer autopress sessions through more missions, menus, game over and the cutscenes, and patch any new spin loops. A crash was reported while shooting the first enemy in mission 1 but not reproduced; get its message (run from a terminal). Check audio (pitch/stereo; `audio.cpp` swaps the channels).
+2. **Release build settings.** Set `trace_mode = false` in `winback.us.toml` (it costs performance), use the WIN32 subsystem for Release (keep a console in debug builds), and add an icon and version info.
+3. **Packaging.** Produce a zip with the exe, SDL2.dll, dxil.dll, dxcompiler.dll, README and license.
+4. **GitHub.** This needs the user: they create the repo or install `gh`.
    - Add an Actions workflow that builds on windows-latest. The ROM can't go in CI, so CI needs the generated sources from somewhere else; look at how Zelda64Recomp and other N64Recomp projects handle this.
    - Publish tagged releases with the zip. Check N64RecompLauncher's expected release asset naming before the first tag.
-6. **Mods.** Add a RecompModTool mod template and SDK headers (the mod game id is `winback`), a settings menu (RmlUi as in Zelda64Recomp, or minimal), then widescreen. After that come split-screen and custom characters.
-7. **Linux build.** Optional, after the above.
+5. **Mods.** Add a RecompModTool mod template and SDK headers (the mod game id is `winback`), a settings menu (RmlUi as in Zelda64Recomp, or minimal), then widescreen. After that come split-screen and custom characters.
+6. **Linux build.** Optional, after the above.
