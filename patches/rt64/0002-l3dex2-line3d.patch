@@ -1,0 +1,299 @@
+diff --git a/src/gbi/rt64_gbi_l3dex2.cpp b/src/gbi/rt64_gbi_l3dex2.cpp
+index 9938e75..8370158 100644
+--- a/src/gbi/rt64_gbi_l3dex2.cpp
++++ b/src/gbi/rt64_gbi_l3dex2.cpp
+@@ -9,13 +9,36 @@
+ namespace RT64 {
+     namespace GBI_L3DEX2 {
+         void line3D(State *state, DisplayList **dl) {
+-            assert(false);
++            const uint8_t a = (*dl)->p0(17, 7);
++            state->rsp->drawLine(a, (*dl)->p0(9, 7), a, int8_t((*dl)->p0(0, 8)));
++        }
++
++        // L3DEX2 draws triangles as wireframes: the three edges as lines, all with the flat shade
++        // color of the triangle's first vertex. The line width is the top byte of the second word.
++        void wireTri(State *state, uint8_t a, uint8_t b, uint8_t c, int8_t width) {
++            state->rsp->drawLine(a, b, a, width);
++            state->rsp->drawLine(b, c, a, width);
++            state->rsp->drawLine(c, a, a, width);
++        }
++
++        void tri1(State *state, DisplayList **dl) {
++            wireTri(state, (*dl)->p0(17, 7), (*dl)->p0(9, 7), (*dl)->p0(1, 7), int8_t((*dl)->p1(24, 8)));
++        }
++
++        // As in the microcode, the triangle in the second word is drawn first.
++        void tri2(State *state, DisplayList **dl) {
++            const int8_t width = int8_t((*dl)->p1(24, 8));
++            wireTri(state, (*dl)->p1(17, 7), (*dl)->p1(9, 7), (*dl)->p1(1, 7), width);
++            wireTri(state, (*dl)->p0(17, 7), (*dl)->p0(9, 7), (*dl)->p0(1, 7), width);
+         }
+ 
+         void setup(GBI *gbi) {
+             GBI_F3DEX2::setup(gbi);
+ 
++            gbi->map[F3DEX2_G_TRI1] = &tri1;
++            gbi->map[F3DEX2_G_TRI2] = &tri2;
++            gbi->map[F3DEX2_G_QUAD] = &tri2;
+             gbi->map[L3DEX2_G_LINE3D] = &line3D;
+         }
+     }
+-};
+\ No newline at end of file
++};
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index ea0c1ac..5a8015b 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -643,6 +643,33 @@ namespace RT64 {
+         }
+     }
+ 
++    uint32_t RSP::copyVertex(uint32_t globalIndex) {
++        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
++        auto &drawData = workload.drawData;
++        const uint32_t newIndex = drawData.vertexCount();
++        for (int i = 0; i < 3; i++) {
++            drawData.posShorts.emplace_back(drawData.posShorts[globalIndex * 3 + i]);
++            drawData.velShorts.emplace_back(drawData.velShorts[globalIndex * 3 + i]);
++        }
++
++        for (int i = 0; i < 4; i++) {
++            drawData.normColBytes.emplace_back(drawData.normColBytes[globalIndex * 4 + i]);
++        }
++
++        drawData.tcFloats.emplace_back(drawData.tcFloats[globalIndex * 2 + 0]);
++        drawData.tcFloats.emplace_back(drawData.tcFloats[globalIndex * 2 + 1]);
++        drawData.viewProjIndices.emplace_back(drawData.viewProjIndices[globalIndex]);
++        drawData.worldIndices.emplace_back(drawData.worldIndices[globalIndex]);
++        drawData.fogIndices.emplace_back(drawData.fogIndices[globalIndex]);
++        drawData.lightIndices.emplace_back(drawData.lightIndices[globalIndex]);
++        drawData.lightCounts.emplace_back(drawData.lightCounts[globalIndex]);
++        drawData.lookAtIndices.emplace_back(drawData.lookAtIndices[globalIndex]);
++        drawData.posTransformed.emplace_back(drawData.posTransformed[globalIndex]);
++        drawData.posScreen.emplace_back(drawData.posScreen[globalIndex]);
++        return newIndex;
++    }
++
+     void RSP::modifyVertex(uint16_t dstIndex, uint16_t dstAttribute, uint32_t value) {
+         if (dstIndex >= RSP_MAX_VERTICES) {
+             assert(false && "Vertex index is not valid. DL is possibly corrupted.");
+@@ -662,33 +689,7 @@ namespace RT64 {
+         auto &posScreen = workload.drawData.posScreen;
+         uint32_t globalIndex = indices[dstIndex];
+         if (used[dstIndex]) {
+-            auto &posShorts = workload.drawData.posShorts;
+-            auto &velShorts = workload.drawData.velShorts;
+-            auto &viewProjIndices = workload.drawData.viewProjIndices;
+-            auto &worldIndices = workload.drawData.worldIndices;
+-            auto &posTransformed = workload.drawData.posTransformed;
+-            const uint32_t newIndex = workload.drawData.vertexCount();
+-            posShorts.emplace_back(posShorts[globalIndex * 3 + 0]);
+-            posShorts.emplace_back(posShorts[globalIndex * 3 + 1]);
+-            posShorts.emplace_back(posShorts[globalIndex * 3 + 2]);
+-            velShorts.emplace_back(velShorts[globalIndex * 3 + 0]);
+-            velShorts.emplace_back(velShorts[globalIndex * 3 + 1]);
+-            velShorts.emplace_back(velShorts[globalIndex * 3 + 2]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 0]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 1]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 2]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 3]);
+-            tcFloats.emplace_back(tcFloats[globalIndex * 2 + 0]);
+-            tcFloats.emplace_back(tcFloats[globalIndex * 2 + 1]);
+-            viewProjIndices.emplace_back(viewProjIndices[globalIndex]);
+-            worldIndices.emplace_back(worldIndices[globalIndex]);
+-            fogIndices.emplace_back(fogIndices[globalIndex]);
+-            lightIndices.emplace_back(lightIndices[globalIndex]);
+-            lightCounts.emplace_back(lightCounts[globalIndex]);
+-            lookAtIndices.emplace_back(lookAtIndices[globalIndex]);
+-            posTransformed.emplace_back(posTransformed[globalIndex]);
+-            posScreen.emplace_back(posScreen[globalIndex]);
+-            indices[dstIndex] = newIndex;
++            indices[dstIndex] = copyVertex(globalIndex);
+             used[dstIndex] = false;
+             globalIndex = indices[dstIndex];
+         }
+@@ -1062,6 +1063,168 @@ namespace RT64 {
+         drawIndexedTri(a, b, c, false);
+     }
+ 
++    // Draws a line the way L3DEX2 does. The microcode clips the line and sends the RDP a single
++    // edge-walked primitive (width is in quarter pixels and is offset by 3):
++    // - At least as tall as it is wide: a parallelogram with horizontal top and bottom edges, reaching
++    //   width + 3 quarter pixels to each side of the line horizontally.
++    // - Wider than it is tall: a parallelogram reaching width + 3 quarter pixels above and below the
++    //   line, with its ends cut vertically by a scissor set to the line's X extent. A line that is
++    //   flat or almost flat is drawn as a rectangle at the height of its top endpoint.
++    // Lines ignore the culling flags. With flat shading, the color comes from colorVtx and the alpha
++    // from each endpoint. The quad is built from copies of the endpoints with screen XY overridden.
++    void RSP::drawLine(uint8_t a, uint8_t b, uint8_t colorVtx, int8_t width) {
++        if ((a >= RSP_MAX_VERTICES) || (b >= RSP_MAX_VERTICES) || (colorVtx >= RSP_MAX_VERTICES)) {
++            assert(false && "Vertex index is not valid. DL is possibly corrupted.");
++            return;
++        }
++
++        const int workloadCursor = state->ext.workloadQueue->writeCursor;
++        Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
++        auto &drawData = workload.drawData;
++        uint32_t &geometryMode = geometryModeStack[geometryModeStackSize - 1];
++        const uint32_t srcIndices[2] = { indices[a], indices[b] };
++        const uint32_t colorIndex = indices[colorVtx];
++        used[a] = used[b] = used[colorVtx] = true;
++
++        // Clip the line in clip space against the near plane and against a guard band, which keeps
++        // the endpoints within range of the screen coordinates. Only offscreen parts are removed.
++        const hlslpp::float4 clip0 = drawData.posTransformed[srcIndices[0]];
++        const hlslpp::float4 clip1 = drawData.posTransformed[srcIndices[1]];
++        const float GuardBand = 4.0f;
++        const float MinW = 1e-5f;
++        float t0 = 0.0f, t1 = 1.0f;
++        auto clipPlane = [&](float d0, float d1) {
++            if ((d0 < 0.0f) && (d1 < 0.0f)) {
++                t0 = 1.0f;
++                t1 = 0.0f;
++            }
++            else if (d0 < 0.0f) {
++                t0 = std::max(t0, d0 / (d0 - d1));
++            }
++            else if (d1 < 0.0f) {
++                t1 = std::min(t1, d0 / (d0 - d1));
++            }
++        };
++
++        clipPlane(clip0.z + clip0.w, clip1.z + clip1.w);
++        clipPlane(clip0.w - MinW, clip1.w - MinW);
++        clipPlane(GuardBand * clip0.w - clip0.x, GuardBand * clip1.w - clip1.x);
++        clipPlane(GuardBand * clip0.w + clip0.x, GuardBand * clip1.w + clip1.x);
++        clipPlane(GuardBand * clip0.w - clip0.y, GuardBand * clip1.w - clip1.y);
++        clipPlane(GuardBand * clip0.w + clip0.y, GuardBand * clip1.w + clip1.y);
++        if (t0 >= t1) {
++            return;
++        }
++
++        // Each endpoint is the original vertex, or a new vertex interpolated along the line. Clip space
++        // is linear in model space, so the model position is interpolated with the same factor.
++        const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
++        const bool usesLighting = geometryMode & G_LIGHTING;
++        uint32_t endIndices[2];
++        const float endT[2] = { t0, t1 };
++        for (int e = 0; e < 2; e++) {
++            const float t = endT[e];
++            if (t == float(e)) {
++                endIndices[e] = srcIndices[e];
++                continue;
++            }
++
++            const uint32_t i0 = srcIndices[0], i1 = srcIndices[1];
++            const uint32_t n = copyVertex(srcIndices[e]);
++            for (int i = 0; i < 3; i++) {
++                const float p0 = drawData.posShorts[i0 * 3 + i], p1 = drawData.posShorts[i1 * 3 + i];
++                drawData.posShorts[n * 3 + i] = int16_t(std::lround(p0 + (p1 - p0) * t));
++            }
++
++            for (int i = 0; i < 4; i++) {
++                const bool isSigned = usesLighting && (i < 3);
++                const float c0 = isSigned ? float(int8_t(drawData.normColBytes[i0 * 4 + i])) : float(drawData.normColBytes[i0 * 4 + i]);
++                const float c1 = isSigned ? float(int8_t(drawData.normColBytes[i1 * 4 + i])) : float(drawData.normColBytes[i1 * 4 + i]);
++                drawData.normColBytes[n * 4 + i] = uint8_t(std::lround(c0 + (c1 - c0) * t));
++            }
++
++            for (int i = 0; i < 2; i++) {
++                const float c0 = drawData.tcFloats[i0 * 2 + i], c1 = drawData.tcFloats[i1 * 2 + i];
++                drawData.tcFloats[n * 2 + i] = c0 + (c1 - c0) * t;
++            }
++
++            const hlslpp::float4 clipPos = clip0 + (clip1 - clip0) * t;
++            const hlslpp::float3 screenPos = (clipPos.xyz / hlslpp::float3(clipPos.w, -clipPos.w, clipPos.w)) * viewport.scale + viewport.translate;
++            drawData.posTransformed[n] = clipPos;
++            drawData.posScreen[n] = screenPos;
++            endIndices[e] = n;
++        }
++
++        // The microcode works on screen coordinates in quarter pixels, with the top endpoint first.
++        int32_t qx[2], qy[2];
++        for (int e = 0; e < 2; e++) {
++            const hlslpp::float3 &screenPos = drawData.posScreen[endIndices[e]];
++            qx[e] = int32_t(std::lround(screenPos[0] * 4.0f));
++            qy[e] = int32_t(std::lround(screenPos[1] * 4.0f));
++        }
++
++        const int top = (qy[1] < qy[0]) ? 1 : 0;
++        const int bottom = 1 - top;
++        const int32_t dx = qx[bottom] - qx[top];
++        const int32_t dy = qy[bottom] - qy[top];
++        const int32_t offset = int32_t(width) + 3;
++        int32_t cornerX[4], cornerY[4];
++        if (std::abs(dx) <= dy) {
++            cornerX[0] = qx[top] - offset;    cornerY[0] = qy[top];
++            cornerX[1] = qx[top] + offset;    cornerY[1] = qy[top];
++            cornerX[2] = qx[bottom] + offset; cornerY[2] = qy[bottom];
++            cornerX[3] = qx[bottom] - offset; cornerY[3] = qy[bottom];
++        }
++        else {
++            const int32_t MaxFlatSlope = 0x755;
++            const bool flat = (dy == 0) || (std::abs(int32_t(std::floor(double(dx) / double(dy)))) > MaxFlatSlope);
++            const int32_t bottomY = flat ? qy[top] : qy[bottom];
++            cornerX[0] = qx[top];    cornerY[0] = qy[top] - offset;
++            cornerX[1] = qx[top];    cornerY[1] = qy[top] + offset;
++            cornerX[2] = qx[bottom]; cornerY[2] = bottomY + offset;
++            cornerX[3] = qx[bottom]; cornerY[3] = bottomY - offset;
++        }
++
++        uint32_t corners[4];
++        for (int i = 0; i < 4; i++) {
++            const int e = (i < 2) ? top : bottom;
++            const int16_t sx = int16_t(std::clamp(cornerX[i], int32_t(INT16_MIN), int32_t(INT16_MAX)));
++            const int16_t sy = int16_t(std::clamp(cornerY[i], int32_t(INT16_MIN), int32_t(INT16_MAX)));
++            corners[i] = copyVertex(endIndices[e]);
++            drawData.modifyPosUints.emplace_back(corners[i] << 1);
++            drawData.modifyPosUints.emplace_back((uint32_t(uint16_t(sx)) << 16) | uint16_t(sy));
++            drawData.posScreen[corners[i]][0] = sx / 4.0f;
++            drawData.posScreen[corners[i]][1] = sy / 4.0f;
++        }
++
++        // Both triangles start at a corner of the first endpoint, which provides the flat shade color.
++        const int first = (top == 0) ? 0 : 2;
++        const uint32_t q0 = corners[first], q1 = corners[(first + 1) % 4], q2 = corners[(first + 2) % 4], q3 = corners[(first + 3) % 4];
++        if ((geometryMode & shadingSmoothMask) == 0) {
++            for (int i = 0; i < 3; i++) {
++                drawData.normColBytes[q0 * 4 + i] = drawData.normColBytes[colorIndex * 4 + i];
++            }
++
++            drawData.fogIndices[q0] = drawData.fogIndices[colorIndex];
++            drawData.lightIndices[q0] = drawData.lightIndices[colorIndex];
++            drawData.lightCounts[q0] = drawData.lightCounts[colorIndex];
++        }
++
++        const uint32_t cullFlags = geometryMode & cullBothMask;
++        if (cullFlags != 0) {
++            geometryMode &= ~cullBothMask;
++            state->updateDrawStatusAttribute(DrawAttribute::GeometryMode);
++        }
++
++        drawIndexedTri(q0, q1, q2, true);
++        drawIndexedTri(q0, q2, q3, true);
++
++        if (cullFlags != 0) {
++            geometryMode |= cullFlags;
++            state->updateDrawStatusAttribute(DrawAttribute::GeometryMode);
++        }
++    }
++
+     void RSP::setViewportAlign(uint16_t ori, int16_t offx, int16_t offy) {
+         extended.global.viewportOrigin = ori;
+         extended.global.viewportOffsetX = offx;
+diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
+index 1611b7a..1cee83d 100644
+--- a/src/hle/rt64_rsp.h
++++ b/src/hle/rt64_rsp.h
+@@ -273,6 +273,8 @@ namespace RT64 {
+         void setTextureImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t segAddress);
+         void drawIndexedTri(uint32_t a, uint32_t b, uint32_t c, bool rawGlobalIndices);
+         void drawIndexedTri(uint32_t a, uint32_t b, uint32_t c);
++        void drawLine(uint8_t a, uint8_t b, uint8_t colorVtx, int8_t width);
++        uint32_t copyVertex(uint32_t globalIndex);
+         void setViewportAlign(uint16_t ori, int16_t offx, int16_t offy);
+         void vertexTestZ(uint8_t vtxIndex);
+         void endVertexTestZ();

@@ -104,10 +104,12 @@ PadState read_keyboard() {
 
 // WINBACK_AUTOPRESS=button@seconds[,button@seconds...]: scripted player 1
 // presses for unattended tests, e.g. "start@10,a@13,a@15". Each press is held
-// for 150 ms. Buttons: a b z start l r du dd dl dr cu cd cl cr.
+// for 150 ms, or for the given seconds with button@seconds+hold (e.g. "r@32+10").
+// Buttons: a b z start l r du dd dl dr cu cd cl cr.
 struct AutoPress {
     uint16_t mask;
     double at;
+    double hold;
 };
 
 std::vector<AutoPress> load_autopress() {
@@ -131,7 +133,9 @@ std::vector<AutoPress> load_autopress() {
             std::string name = item.substr(0, at);
             for (const auto& [n, mask] : names) {
                 if (name == n) {
-                    out.push_back({mask, std::atof(item.c_str() + at + 1)});
+                    size_t plus = item.find('+', at);
+                    double hold = plus == std::string::npos ? 0.15 : std::atof(item.c_str() + plus + 1);
+                    out.push_back({mask, std::atof(item.c_str() + at + 1), hold});
                 }
             }
         }
@@ -152,7 +156,7 @@ uint16_t autopress_buttons() {
     double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     uint16_t buttons = 0;
     for (const AutoPress& p : presses) {
-        if (t >= p.at && t < p.at + 0.15) {
+        if (t >= p.at && t < p.at + p.hold) {
             buttons |= p.mask;
         }
     }
