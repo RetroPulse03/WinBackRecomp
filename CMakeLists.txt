@@ -121,6 +121,7 @@ add_executable(WinBackRecompiled
     src/main/rt64_context.cpp
     src/main/audio.cpp
     src/main/input.cpp
+    src/main/display.cpp
     src/ui/menu.cpp
     src/ui/ui_renderer.cpp
 )

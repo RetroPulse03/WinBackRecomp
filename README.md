@@ -29,7 +29,7 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 
 | Option | Effect |
 |---|---|
-| `--fullscreen` | Start in fullscreen. F11 or Alt+Enter toggles it at any time. |
+| `--fullscreen` | Start in borderless fullscreen. F11 or Alt+Enter switches between windowed and full screen at any time. |
 | `--console` | Show log output. |
 | `--developer` | Show RT64's debug interface. |
 
@@ -65,7 +65,7 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 
 In menus and on the pause screen, A confirms and B goes back.
 
-### Recomp menu and Level Select
+### Recomp menu
 
 Press Select (or Esc) at any time to open the recomp menu over the game; press it again to close it. The game gets no input while the menu is open. Move with the D-pad, left stick or arrow keys, choose with A (Enter) and go back with B (Backspace).
 
@@ -74,6 +74,15 @@ Press Select (or Esc) at any time to open the recomp menu over the game; press i
 - A checkpoint becomes **RECORDED** the first time you reach it in normal play. The game's own checkpoint data is saved to `saves/checkpoints/`, and the menu loads exactly that state from then on.
 - Until then it is **BASIC**: a fresh start of the stage with you placed at the checkpoint. Items, opened doors and other progress from earlier in the stage are missing, so some areas can behave differently than in normal play. Checkpoints reached after a BASIC load aren't recorded.
 - **Stage start** begins the stage as the game does, with its opening scene, full health and starting equipment.
+
+**Display** holds the picture settings. Change a setting with left and right; it applies straight away and is saved to `settings.json` next to the executable.
+
+- **Window mode:** Windowed, Borderless (a window covering the screen) or Fullscreen (exclusive full screen at your desktop resolution).
+- **Resolution:** how sharply the 3D scene is drawn. Original is the N64's 240 lines, Double is 480, and Match window (the default) draws at the window's own size.
+- **Aspect ratio:** Original (4:3) or Widescreen, which shows more of the scene at the sides when the window is wider than 4:3.
+- **Anti-aliasing:** off, or 2x (default), 4x or 8x MSAA.
+
+**Exit Game** closes the program after a confirmation. Progress since your last Controller Pak save is lost.
 
 Players 2-4 use additional controllers.
 

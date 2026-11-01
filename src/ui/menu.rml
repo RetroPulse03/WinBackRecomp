@@ -86,6 +86,8 @@ div { display: block; }
 .plate .tag.recorded { color: #005a52; }
 .plate.selected .tag.basic { color: #4a2400; }
 .plate.selected .tag.recorded { color: #003a38; }
+.plate .tag.value { font-size: 26dp; font-style: italic; color: #2a3036; }
+.plate.selected .tag.value { color: #00191c; }
 .more {
     height: 24dp;
     padding-left: 26dp;

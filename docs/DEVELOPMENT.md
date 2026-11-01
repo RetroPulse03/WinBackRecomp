@@ -94,7 +94,7 @@ The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in
 
 ### Portable data
 
-The runtime's config path is the executable's folder (`main.cpp`), and RT64's data path is `rt64/` inside it (`rt64_context.cpp`). The stored ROM copy, `saves/`, `mods/`, `mod_config/`, `mods.json` and `rt64/` all live there. Nothing may be written to per-user system folders such as AppData or Documents. The release zip must not contain any of these files, because launcher updates unpack over the install folder.
+The runtime's config path is the executable's folder (`main.cpp`), and RT64's data path is `rt64/` inside it (`rt64_context.cpp`). The stored ROM copy, `saves/`, `mods/`, `mod_config/`, `mods.json`, `settings.json` and `rt64/` all live there. Nothing may be written to per-user system folders such as AppData or Documents. The release zip must not contain any of these files, because launcher updates unpack over the install folder.
 
 ## Rendering
 
@@ -116,6 +116,13 @@ Changes to dependencies live in `patches/<dep>/*.patch`. `tools/fetch_deps.sh` a
 - `src/ui/ui_renderer.cpp` is the RmlUi render interface on RT64's RHI, adapted from Zelda64Recomp's. It uses RmlUi's compatibility interface with generated textures only. RmlUi's vertex colours are premultiplied but its font textures aren't, so the pixel shader premultiplies the texture and blending is `ONE / INV_SRC_ALPHA`.
 - `src/ui/menu.rml` holds the layout and style. It is compiled into the executable with the Lato fonts (`file_to_c`), so the release needs no extra files. Sizes are in `dp`, where 1080 dp is the window height. The look imitates the game's pause screen. Reading the game's own plate textures and fonts from the ROM at run time is a later step.
 - The visible rows are rebuilt as RML whenever the state changes. Only 10 rows are shown at a time.
+- Entries: Level Select, Display, Return to Game and Exit Game. Exit Game asks for confirmation, then calls `ultramodern::quit()` as closing the window does. Display changes and quitting run on the window thread after the menu's lock is released.
+
+### Display settings
+
+`src/main/display.cpp` keeps the window mode, resolution, aspect ratio and anti-aliasing, saves them to `settings.json` and applies them live. The renderer options go through ultramodern's graphics config (`update_config` in `rt64_context.cpp`). The window mode is applied with SDL on the window thread: `SDL_WINDOW_FULLSCREEN_DESKTOP` for Borderless, and `SDL_WINDOW_FULLSCREEN` at the desktop display mode for Fullscreen. ultramodern's `wm_option` stays Windowed, because RT64's own full-screen mode is a borderless window that would fight SDL. `--fullscreen` and Big Picture mode start borderless without changing the saved setting.
+
+In one of five scripted runs, rendering stopped (the game thread kept running) when the resolution was changed half a second after leaving Fullscreen for Windowed, and the game then couldn't shut down. It didn't happen again in four repeats. If it is seen again, capture thread stacks with lldb while it is stuck.
 
 ## Level Select
 
@@ -156,7 +163,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** controls (Classic/Modern, remapping), graphics (including the graphics API), audio, added to the same menu.
+3. **Settings:** controls (Classic/Modern, remapping), the graphics API, audio, added to the same menu. Display (window mode, resolution, aspect ratio, anti-aliasing) is done.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
 5. **Mods:** a RecompModTool template and SDK headers (mod game id `winback`), then widescreen, split-screen and custom characters.
 6. **Linux build.**

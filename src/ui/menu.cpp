@@ -4,7 +4,8 @@
 // and updates the menu state; RT64's present thread draws it through the
 // render hooks (ui_renderer.cpp), rebuilding the visible rows whenever the
 // state changes. Entries: Level Select (stage, then stage start or
-// checkpoint) and Return to Game.
+// checkpoint), Display (window mode and renderer options), Return to Game and
+// Exit Game.
 
 #include <algorithm>
 #include <atomic>
@@ -26,6 +27,8 @@
 #include "menu.hpp"
 #include "ui_renderer.hpp"
 #include "level_select.hpp"
+#include "display.hpp"
+#include "ultramodern/ultramodern.hpp"
 
 #include "Lato_Bold_ttf.h"
 #include "Lato_BoldItalic_ttf.h"
@@ -34,11 +37,52 @@
 
 namespace {
 
-enum class Screen { Main, Stages, Checkpoints };
+enum class Screen { Main, Stages, Checkpoints, Display, ConfirmExit };
 enum class Action { Toggle, Up, Down, Left, Right, Accept, Back };
 
 constexpr int visible_rows = 10;
-const char* const main_items[] = {"LEVEL SELECT", "RETURN TO GAME"};
+enum MainItem { MainLevelSelect, MainDisplay, MainReturn, MainExit };
+const char* const main_items[] = {"LEVEL SELECT", "DISPLAY", "RETURN TO GAME", "EXIT GAME"};
+const char* const exit_items[] = {"EXIT GAME", "CANCEL"};
+
+// Display screen rows. Each option's values are its enum's values in order.
+struct DisplayOption {
+    const char* name;
+    const char* note;
+    std::vector<const char*> values;
+};
+const DisplayOption display_options[] = {
+    {"WINDOW MODE", "BORDERLESS covers the screen with a window and switches away instantly. FULLSCREEN"
+                    " takes over the screen; it can help with stutter on some PCs. F11 or Alt+Enter also"
+                    " switch between windowed and full screen.",
+     {"WINDOWED", "BORDERLESS", "FULLSCREEN"}},
+    {"RESOLUTION", "How sharply 3D is drawn. MATCH WINDOW draws at the window's size. The N64 drew 240"
+                   " lines; ORIGINAL keeps that look.",
+     {"ORIGINAL (240P)", "DOUBLE (480P)", "MATCH WINDOW"}},
+    {"ASPECT RATIO", "WIDESCREEN shows more of the scene to the sides when the window is wider than 4:3.",
+     {"ORIGINAL (4:3)", "WIDESCREEN"}},
+    {"ANTI-ALIASING", "Smooths jagged edges on 3D models. Higher settings cost more graphics power.",
+     {"OFF", "2X MSAA", "4X MSAA", "8X MSAA"}},
+};
+
+int display_value(const winback::display::Settings& d, int option) {
+    switch (option) {
+        case 0: return int(d.window_mode);
+        case 1: return int(d.resolution);
+        case 2: return int(d.aspect_ratio);
+        default: return int(d.antialiasing);
+    }
+}
+
+void set_display_value(winback::display::Settings& d, int option, int value) {
+    namespace R = ultramodern::renderer;
+    switch (option) {
+        case 0: d.window_mode = winback::display::WindowMode(value); break;
+        case 1: d.resolution = R::Resolution(value); break;
+        case 2: d.aspect_ratio = R::AspectRatio(value); break;
+        default: d.antialiasing = R::Antialiasing(value); break;
+    }
+}
 
 struct State {
     bool open = false;
@@ -46,7 +90,17 @@ struct State {
     int main_sel = 0;
     int stage_sel = 0;
     int row_sel = 0;     // Checkpoint screen: 0 = stage start, then checkpoints.
+    int display_sel = 0;
+    int exit_sel = 1;
+    winback::display::Settings display;
     uint64_t version = 0;
+};
+
+// Work done after the state lock is released.
+struct Effects {
+    bool display = false;
+    winback::display::Settings display_settings;
+    bool quit = false;
 };
 
 std::mutex state_mutex;
@@ -58,6 +112,8 @@ int row_count(const State& s) {
         case Screen::Main: return int(std::size(main_items));
         case Screen::Stages: return int(winback::levels::stages().size());
         case Screen::Checkpoints: return 1 + int(winback::levels::stages()[s.stage_sel].checkpoints.size());
+        case Screen::Display: return int(std::size(display_options));
+        case Screen::ConfirmExit: return int(std::size(exit_items));
     }
     return 0;
 }
@@ -66,6 +122,8 @@ int& selection(State& s) {
     switch (s.screen) {
         case Screen::Main: return s.main_sel;
         case Screen::Stages: return s.stage_sel;
+        case Screen::Display: return s.display_sel;
+        case Screen::ConfirmExit: return s.exit_sel;
         default: return s.row_sel;
     }
 }
@@ -78,33 +136,64 @@ void set_open(State& s, bool open) {
     open_flag = open;
 }
 
-void apply(Action a) {
-    std::lock_guard lock{state_mutex};
+// Steps the selected display option by delta, wrapping around.
+void change_display(State& s, int delta, Effects& fx) {
+    const DisplayOption& opt = display_options[s.display_sel];
+    int n = int(opt.values.size());
+    int v = (display_value(s.display, s.display_sel) + delta + n) % n;
+    set_display_value(s.display, s.display_sel, v);
+    fx.display = true;
+    fx.display_settings = s.display;
+}
+
+Effects apply_locked(Action a) {
+    Effects fx;
     State& s = state;
     if (a == Action::Toggle) {
         set_open(s, !s.open);
         s.version++;
-        return;
+        return fx;
     }
     if (!s.open) {
-        return;
+        return fx;
     }
     int count = row_count(s);
     int& sel = selection(s);
     switch (a) {
         case Action::Up: sel = (sel + count - 1) % count; break;
         case Action::Down: sel = (sel + 1) % count; break;
-        case Action::Left: sel = std::max(sel - visible_rows, 0); break;
-        case Action::Right: sel = std::min(sel + visible_rows, count - 1); break;
+        case Action::Left:
+        case Action::Right:
+            if (s.screen == Screen::Display) change_display(s, a == Action::Left ? -1 : 1, fx);
+            else if (a == Action::Left) sel = std::max(sel - visible_rows, 0);
+            else sel = std::min(sel + visible_rows, count - 1);
+            break;
         case Action::Back:
             if (s.screen == Screen::Main) set_open(s, false);
-            else if (s.screen == Screen::Stages) s.screen = Screen::Main;
-            else s.screen = Screen::Stages;
+            else if (s.screen == Screen::Checkpoints) s.screen = Screen::Stages;
+            else s.screen = Screen::Main;
             break;
         case Action::Accept:
             if (s.screen == Screen::Main) {
-                if (s.main_sel == 0) s.screen = Screen::Stages;
-                else set_open(s, false);
+                switch (s.main_sel) {
+                    case MainLevelSelect: s.screen = Screen::Stages; break;
+                    case MainDisplay:
+                        s.screen = Screen::Display;
+                        s.display = winback::display::get();
+                        break;
+                    case MainExit:
+                        s.screen = Screen::ConfirmExit;
+                        s.exit_sel = 1;
+                        break;
+                    default: set_open(s, false); break;
+                }
+            }
+            else if (s.screen == Screen::Display) {
+                change_display(s, 1, fx);
+            }
+            else if (s.screen == Screen::ConfirmExit) {
+                if (s.exit_sel == 0) fx.quit = true;
+                else s.screen = Screen::Main;
             }
             else if (s.screen == Screen::Stages) {
                 s.screen = Screen::Checkpoints;
@@ -119,6 +208,22 @@ void apply(Action a) {
             break;
     }
     s.version++;
+    return fx;
+}
+
+void apply(Action a) {
+    Effects fx;
+    {
+        std::lock_guard lock{state_mutex};
+        fx = apply_locked(a);
+    }
+    if (fx.display) {
+        winback::display::set(fx.display_settings);
+    }
+    if (fx.quit) {
+        std::printf("[menu] exit game\n");
+        ultramodern::quit();
+    }
 }
 
 // --- Input (window thread) ---------------------------------------------------
@@ -281,9 +386,36 @@ void rebuild(const State& s) {
         set_text("subtitle", "WinBack Recompiled");
         set_text("list", rows(int(std::size(main_items)), s.main_sel,
             [](int i, bool sel) { return plate(main_items[i], sel); }));
-        set_text("detail", s.main_sel == 0
-            ? "<div class=\"head\">LEVEL SELECT</div><div class=\"note\">Jump to the start of any stage, or to one of its checkpoints.</div>"
-            : "<div class=\"head\">RETURN TO GAME</div><div class=\"note\">Close this menu.</div>");
+        static const char* const notes[] = {
+            "Jump to the start of any stage, or to one of its checkpoints.",
+            "Window mode, resolution and other picture settings.",
+            "Close this menu.",
+            "Close WinBack Recompiled.",
+        };
+        set_text("detail", std::string("<div class=\"head\">") + main_items[s.main_sel] + "</div>"
+            "<div class=\"note\">" + notes[s.main_sel] + "</div>");
+    }
+    else if (s.screen == Screen::Display) {
+        set_title("DISPLAY");
+        set_text("subtitle", "Picture settings");
+        set_text("list", rows(int(std::size(display_options)), s.display_sel, [&](int i, bool sel) {
+            const DisplayOption& opt = display_options[i];
+            return plate(opt.name, sel, std::string("&lt; ") + opt.values[display_value(s.display, i)] + " &gt;", "value");
+        }));
+        const DisplayOption& opt = display_options[s.display_sel];
+        set_text("detail", std::string("<div class=\"head\">") + opt.name + "</div>"
+            "<div>" + opt.values[display_value(s.display, s.display_sel)] + "</div>"
+            "<div class=\"note\">" + opt.note + "</div>");
+        hint = "<span class=\"key\">LEFT/RIGHT</span> CHANGE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
+               " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";
+    }
+    else if (s.screen == Screen::ConfirmExit) {
+        set_title("EXIT GAME");
+        set_text("subtitle", "Close WinBack Recompiled?");
+        set_text("list", rows(int(std::size(exit_items)), s.exit_sel,
+            [](int i, bool sel) { return plate(exit_items[i], sel); }));
+        set_text("detail", "<div class=\"head\">EXIT GAME</div><div class=\"note\">Progress since your last"
+            " Controller Pak save is lost. Recorded checkpoints are kept.</div>");
     }
     else if (s.screen == Screen::Stages) {
         const auto& stages = L::stages();

@@ -34,6 +34,7 @@
 #include "audio.hpp"
 #include "input.hpp"
 #include "menu.hpp"
+#include "display.hpp"
 
 namespace fs = std::filesystem;
 
@@ -150,6 +151,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
         message_box(SDL_GetError());
         std::exit(EXIT_FAILURE);
     }
+    winback::display::attach_window(window);
 #if defined(_WIN32)
     SDL_SysWMinfo wm;
     SDL_VERSION(&wm.version);
@@ -177,11 +179,7 @@ void update_gfx(void*) {
             case SDL_KEYDOWN:
                 if (ev.key.keysym.scancode == SDL_SCANCODE_F11 ||
                     (ev.key.keysym.scancode == SDL_SCANCODE_RETURN && (ev.key.keysym.mod & KMOD_ALT))) {
-                    auto cfg = ultramodern::renderer::get_graphics_config();
-                    cfg.wm_option = cfg.wm_option == ultramodern::renderer::WindowMode::Fullscreen
-                        ? ultramodern::renderer::WindowMode::Windowed
-                        : ultramodern::renderer::WindowMode::Fullscreen;
-                    ultramodern::renderer::set_graphics_config(cfg);
+                    winback::display::toggle_fullscreen();
                 }
                 break;
             default:
@@ -190,25 +188,6 @@ void update_gfx(void*) {
         }
     }
     winback::menu::update();
-}
-
-void set_default_graphics_config() {
-    namespace R = ultramodern::renderer;
-    R::GraphicsConfig cfg{};
-    cfg.developer_mode = developer;
-    cfg.res_option = R::Resolution::Auto;
-    cfg.wm_option = fullscreen ? R::WindowMode::Fullscreen : R::WindowMode::Windowed;
-    cfg.hr_option = R::HUDRatioMode::Clamp16x9;
-    // Vulkan on every platform (RT64's Auto picks D3D12 on Windows). D3D12 stays
-    // available through WINBACK_GFX_API=d3d12.
-    cfg.api_option = R::GraphicsApi::Vulkan;
-    cfg.ar_option = R::AspectRatio::Expand;
-    cfg.msaa_option = R::Antialiasing::MSAA2X;
-    cfg.rr_option = R::RefreshRate::Display;
-    cfg.hpfb_option = R::HighPrecisionFramebuffer::Auto;
-    cfg.rr_manual_value = 60;
-    cfg.ds_option = 1;
-    R::set_graphics_config(cfg);
 }
 
 #ifdef _WIN32
@@ -270,7 +249,7 @@ int main(int argc, char** argv) {
     if (!ensure_rom()) {
         return exit_no_rom;
     }
-    set_default_graphics_config();
+    winback::display::load(developer, fullscreen);
     winback::menu::set_render_hooks();
 
     recomp::Configuration cfg{};
