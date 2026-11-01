@@ -13,6 +13,7 @@
 #define HLSL_CPU
 #endif
 #include "hle/rt64_application.h"
+#include "librecomp/game.hpp"
 
 #include "ultramodern/config.hpp"
 #include "ultramodern/renderer_context.hpp"
@@ -213,6 +214,9 @@ public:
 
         RT64::ApplicationConfiguration app_config;
         app_config.useConfigurationFile = false;
+        // Keep RT64's log and caches in the game folder instead of %LOCALAPPDATA%.
+        app_config.detectDataPath = false;
+        app_config.dataPath = recomp::get_config_path() / "rt64";
         app = std::make_unique<RT64::Application>(core, app_config);
 
         const auto& cfg = R::get_graphics_config();

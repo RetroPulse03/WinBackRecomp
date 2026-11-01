@@ -6,7 +6,7 @@
   "start": {
     "program": ["WinBackRecompiled.exe"]
   },
-  "saves": ["{config}/WinBackRecompiled/saves"],
+  "saves": ["{install}/saves"],
   "exit_codes": {
     "2": "No WinBack - Covert Operations (USA) ROM was selected. Start the game again and pick your big-endian .z64 ROM."
   }

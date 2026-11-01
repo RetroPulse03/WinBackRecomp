@@ -39,7 +39,6 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr const char* app_title = "WinBack Recompiled";
-constexpr const char* app_folder = "WinBackRecompiled";
 // Exit code when no valid ROM was given; recomplauncher.json maps it to a message.
 constexpr int exit_no_rom = 2;
 const recomp::Version project_version{
@@ -50,21 +49,6 @@ bool fullscreen = false;
 bool developer = false;
 bool game_started = false;
 std::string rom_arg;
-
-fs::path app_data_dir() {
-#ifdef _WIN32
-    const char* base = std::getenv("APPDATA");
-#else
-    const char* base = std::getenv("XDG_DATA_HOME");
-    if (base == nullptr) {
-        static std::string home = std::string(std::getenv("HOME")) + "/.local/share";
-        base = home.c_str();
-    }
-#endif
-    fs::path dir = fs::path(base ? base : ".") / app_folder;
-    fs::create_directories(dir);
-    return dir;
-}
 
 fs::path exe_dir() {
     char* base = SDL_GetBasePath();
@@ -106,8 +90,8 @@ bool select_rom_from(const std::vector<fs::path>& candidates) {
     return false;
 }
 
-// Stores the ROM with the runtime on first run: --rom, then any .z64 next to
-// the exe or in the working directory, then one the player picks.
+// Stores a verified copy of the ROM next to the exe on first run: --rom, then
+// any .z64 next to the exe or in the working directory, then one the player picks.
 bool ensure_rom() {
     if (recomp::is_rom_valid(winback::game_id)) {
         return true;
@@ -268,7 +252,9 @@ int main(int argc, char** argv) {
     timeBeginPeriod(1);
 #endif
 
-    recomp::register_config_path(app_data_dir());
+    // Portable: the stored ROM, saves, mods and renderer data all live in the
+    // executable's folder, never in per-user system folders.
+    recomp::register_config_path(exe_dir());
     if (!winback::register_game()) {
         message_box("Failed to register the game with the runtime.");
         return EXIT_FAILURE;

@@ -15,7 +15,7 @@ If the game freezes or crashes, please [open an issue](https://github.com/RetroP
 Releases are packaged for [RecompLauncher](https://recomplauncher.com/) and [Quiver Launcher](https://quiverlauncher.com/), which install and update the game from this repository's releases. To install by hand:
 
 1. Download `WinBackRecompiled-vX.Y.Z-Windows-x64.zip` from [Releases](https://github.com/RetroPulse03/WinBackRecomp/releases) and extract it.
-2. Run `WinBackRecompiled.exe`. On first start it looks for your ROM next to the executable and otherwise asks you to select it. You can also pass `--rom <path>`. The ROM is verified and stored in `%APPDATA%\WinBackRecompiled`, so this is only needed once.
+2. Run `WinBackRecompiled.exe`. On first start it looks for your ROM next to the executable and otherwise asks you to select it. You can also pass `--rom <path>`. The ROM is verified and a copy is kept in the game folder, so this is only needed once.
 
 Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 
@@ -41,7 +41,7 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 
 **Controller:** left stick = analog stick, A = A, X = B, B = C-Down, Y = C-Left, LB = L, RB or RT = R, LT = Z, right stick = C buttons, Start = Start. Players 2-4 use additional controllers.
 
-Saves are stored on an emulated Controller Pak at `%APPDATA%\WinBackRecompiled\saves\`.
+The game is fully portable: everything it writes (the ROM copy, saves, mods and renderer data) stays in its own folder, and nothing goes to AppData or Documents. Saves are on an emulated Controller Pak in `saves/`. To back up or move your game, copy the whole folder.
 
 ## Building from source
 

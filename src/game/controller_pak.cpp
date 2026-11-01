@@ -1,7 +1,7 @@
 // File-backed Controller Pak (osPfs*), replacing librecomp's "no pak" stubs.
 //
 // WinBack saves to the Controller Pak. Each controller port gets one pak
-// image on disk (<config>/saves/controller_pak_<port>.bin) holding up to 16
+// image on disk (<game folder>/saves/controller_pak_<port>.bin) holding up to 16
 // notes in 123 pages of 256 bytes, like a real 32 KiB pak. Only the libultra
 // file API is emulated; the game never touches the pak's raw blocks.
 

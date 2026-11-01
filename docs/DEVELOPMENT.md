@@ -84,7 +84,11 @@ The game uses the audio microcode at ROM `0xDAD50`, size `0xC60` (`aspMain.us.to
 
 ### Saves
 
-The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in `%APPDATA%\WinBackRecompiled\saves\`. librecomp's `pak.cpp` is excluded from the build.
+The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in `saves/` next to the executable. librecomp's `pak.cpp` is excluded from the build.
+
+### Portable data
+
+The runtime's config path is the executable's folder (`main.cpp`), and RT64's data path is `rt64/` inside it (`rt64_context.cpp`). The stored ROM copy, `saves/`, `mods/`, `mod_config/`, `mods.json` and `rt64/` all live there. Nothing may be written to per-user system folders such as AppData or Documents. The release zip must not contain any of these files, because launcher updates unpack over the install folder.
 
 ## Rendering
 
@@ -115,7 +119,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 - The asset name carries the system and processor (`-Windows-x64.zip`, later `-Linux-x64.AppImage`). Launchers choose the file for the player's PC from those words.
 - The executable sits at the top of the zip. Updates unpack over the install folder, so the release must not contain files the game writes at run time.
-- `recomplauncher.json` (RecompLauncher SDK level 1) sits next to the executable. It names the program, the save folder and the message for exit code 2 (no ROM selected). RecompLauncher's game check only understands disc images and folders, so the executable finds the ROM itself and shows an Open dialog when there isn't one.
+- `recomplauncher.json` (RecompLauncher SDK level 1) sits next to the executable. It names the program, the save folder (`{install}/saves`) and the message for exit code 2 (no ROM selected). RecompLauncher's game check only understands disc images and folders, so the executable finds the ROM itself and shows an Open dialog when there isn't one.
 - Listing requires a submission on each site: [recompstore.com/submit](https://recompstore.com/submit?platform=pc) and [quiverlauncher.com/submit](https://quiverlauncher.com/submit).
 
 ## Roadmap
