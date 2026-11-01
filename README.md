@@ -32,7 +32,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install "splat64[mips]" xxhash pyyaml
 ```
 
-Clone the dependencies into `deps/` (pinned commits are listed below), build `deps/N64Recomp`, put the ROM in the repo root as `baserom.us.z64`, then:
+Run `sh tools/fetch_deps.sh` to clone the pinned dependencies into `deps/`, build `deps/N64Recomp` (commands in that script), put the ROM in the repo root as `baserom.us.z64`, then:
 
 ```
 sh tools/regen.sh

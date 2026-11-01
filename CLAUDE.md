@@ -1,0 +1,66 @@
+# WinBack Recompiled — notes for Claude
+
+Static recompilation of *WinBack: Covert Operations* (N64, USA) to a native Windows exe: splat → `tools/sigmatch.py` → N64Recomp/RSPRecomp → N64ModernRuntime + RT64. README.md covers user-facing docs, build steps and pinned versions; `docs/ROM_MAP.md` covers the ROM layout. Read both before starting.
+
+## Working with the user
+
+- The user wants this driven **autonomously**: make the calls yourself and only stop when truly blocked (e.g. something needs their GitHub account).
+- Goals, in priority order: (1) as automated as possible, (2) as native as possible, (3) mod-capable (split-screen, custom characters), (4) released through GitHub Releases so [N64RecompLauncher](https://github.com/SirDiabo/N64RecompLauncher) can install it.
+- Never commit ROM-derived data. `.gitignore` already excludes the ROM, `asm/`, `RecompiledFuncs/`, `rsp/`, the generated syms/ld files, `deps/`, `build/`, logs and `captures/`.
+
+## Current state (2026-11-01)
+
+- Boots through the intros, title screen and Controller Pak save into the first mission at 60 fps. Only scripted runs of 45 seconds or less have been tested.
+- The repo is local only: there's no GitHub remote yet and `gh` isn't installed.
+- The working tree is ready to regenerate and build (`baserom.us.z64` is in the root, and the `deps/` and `build/` trees are already built).
+
+## Everyday commands (from the repo root)
+
+```
+sh tools/regen.sh                                  # ROM -> asm, syms, RecompiledFuncs, rsp/aspMain.cpp
+tools\vsenv.cmd cmake --build build                # incremental build (build/ is already configured)
+$env:WINBACK_DEBUG=1; build\WinBackRecompiled.exe --rom baserom.us.z64
+powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Shots 4
+```
+
+- Fresh machine: run `sh tools/fetch_deps.sh`, build N64Recomp (the commands are in that script's header), then follow README.md "Building".
+- Scripted input for unattended runs: `WINBACK_AUTOPRESS=start@6,a@10,...`. The sequence used to reach the first mission (with the pause menu at the end) was `start@6,start@9,start@12,a@14,a@16,start@18,a@20,a@23,a@26,start@30,a@33,a@36`.
+- `WINBACK_WATCH=8011xxxx,...` adds memory words to the debug dump that prints every 5 seconds.
+- Re-run `regen.sh` after changing `symbol_addrs.txt`, `winback.us.toml`, `winback.us.yaml` or the generators. Then rebuild; CMake globs RecompiledFuncs, so re-configure if the file count changes.
+
+## How the runtime bites (read before debugging a hang)
+
+- **Thread switches only happen at OS calls.** ultramodern switches game threads only inside libultra calls. VI/SP/DP messages are delivered only during message calls or `pause_self`/`yield_self`. Any loop that polls memory written by another thread therefore deadlocks.
+  - Symptom: one thread's trace (WINBACK_DEBUG) repeats the same few functions forever while gfx/vi drop to 0.
+  - Fix with a `[[patches.hook]]` that calls `yield_self_1ms(rdram)` at the loop head, or with `ignored` plus a `RECOMP_FUNC` in `src/game/patches.c`. Existing examples are in both files.
+  - `tools/find_spinloops.py` lists candidates. It's noisy (53 hits), so only fix the ones you actually reach.
+- **Library function names matter.** N64Recomp replaces libultra functions by name (`deps/N64Recomp/src/symbol_lists.cpp`). A missed or misnamed libultra function runs the original MIPS and touches hardware registers. Signatures that differ only by relocation can't tell some functions apart; name those by hand in `symbol_addrs.txt` (e.g. `osViGetNextFramebuffer`).
+- **GCC tail-merging.**
+  - `gen_recomp_syms.py` adds overlapping entry points at mid-function branch targets.
+  - It also extends functions whose jump table cases fall in a tail splat split off. The symptom of a missed one is a "Switch-case out of bounds" abort.
+  - A hook's `before_vram` must be inside a function that exists in the syms file, not at a label.
+- **Audio microcode.** The audio ucode the game uses is ROM 0xDAD50, size 0xC60 (`aspMain.us.toml`). The one at 0xD9F30 is unused. Missing indirect jump targets go in `extra_indirect_branch_targets`.
+- **Saves.** The Controller Pak is ours (`src/game/controller_pak.cpp`), stored in `%APPDATA%\WinBackRecompiled\saves\`. librecomp's `pak.cpp` is removed from the build in CMakeLists.txt.
+
+## Toolchain quirks on this machine
+
+- Build through `tools\vsenv.cmd`, which sets up vcvars64 and puts LLVM on PATH.
+- The toolchain is clang-cl with Ninja. LLVM 23 needs `__PRFCHWINTRIN_H` (already set) and RT64 needs `-Wno-error`.
+- The CMake on PATH (from WinLibs) fails GitHub TLS, so download anything with Windows `curl` instead.
+- Python lives in `.venv` (splat64 0.50.1, xxhash, pyyaml). Run the tools with `-I`.
+- Don't use heredoc/Python edits for C string literals containing `\n`; they got mangled several times. Use the Edit tool.
+- Write files from Python with `encoding="utf-8"`. cp1252 once truncated README.md.
+- If linking fails with "permission denied", an old `WinBackRecompiled.exe` is still running; kill it.
+- `deps/ref-mkt` and `deps/ref-ob64` are other recomp projects, kept for API reference only. ref-mkt has no license, so don't copy code from it.
+
+## Roadmap (do in order unless the user redirects)
+
+1. **Grey square behind the "GO INTO MISSION!" banner.** This is an RT64 render bug. Try `--developer` for RT64's debugger and inspect the draw calls; likely a fill/copy-mode rect or a framebuffer effect.
+2. **Soak tests.** Run longer autopress sessions through more missions, menus, game over and the cutscenes, and patch any new spin loops. Check audio (pitch/stereo; `audio.cpp` swaps the channels).
+3. **Release build settings.** Set `trace_mode = false` in `winback.us.toml` (it costs performance), use the WIN32 subsystem for Release (keep a console in debug builds), and add an icon and version info.
+4. **Packaging.** Produce a zip with the exe, SDL2.dll, dxil.dll, dxcompiler.dll, README and license.
+5. **GitHub.** This needs the user: they create the repo or install `gh`.
+   - Add an Actions workflow that builds on windows-latest. The ROM can't go in CI, so CI needs the generated sources from somewhere else; look at how Zelda64Recomp and other N64Recomp projects handle this.
+   - Publish tagged releases with the zip. Check N64RecompLauncher's expected release asset naming before the first tag.
+6. **Mods.** Add a RecompModTool mod template and SDK headers (the mod game id is `winback`), a settings menu (RmlUi as in Zelda64Recomp, or minimal), then widescreen. After that come split-screen and custom characters.
+7. **Linux build.** Optional, after the above.
