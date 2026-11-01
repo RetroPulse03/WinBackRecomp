@@ -21,6 +21,9 @@ clone() { # dir url commit
 clone N64Recomp https://github.com/N64Recomp/N64Recomp.git ffb39cdad1da5de07eaaa48bd1db4a89a7986771
 clone N64ModernRuntime https://github.com/N64Recomp/N64ModernRuntime.git cdf5abbd5026fef5c364c676e4667c45e42b6863
 clone rt64 https://github.com/rt64/rt64.git 23cab603c4f9f4a8b369b38e036f1aa484603878
+# Overlay menu (src/ui/): RmlUi, and FreeType prebuilt for Windows.
+clone RmlUi https://github.com/mikke89/RmlUi.git 7a06f27db04fe5d13a5dacc19b2b4544673a4eca
+clone freetype-windows-binaries https://github.com/ubawurinna/freetype-windows-binaries.git d6fb49d11a9d0011bf4ecfe7e570beaaa189838a
 # Only its signature file (src/builtin_signatures.sig) is used.
 clone n64sym https://github.com/shygoo/n64sym.git ccf4600f3389f1a84bde23339225cf372fdf7712
 

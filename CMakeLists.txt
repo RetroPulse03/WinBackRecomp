@@ -61,6 +61,21 @@ if (WIN32)
     target_include_directories(rt64 BEFORE PRIVATE ${sdl2_SOURCE_DIR}/include)
 endif()
 
+# RmlUi draws the overlay menu (src/ui/) on top of the game through RT64's
+# render hooks. Static build with FreeType; on Windows FreeType comes from the
+# prebuilt static library in deps/freetype-windows-binaries.
+if (WIN32)
+    set(WINBACK_FREETYPE ${DEPS}/freetype-windows-binaries)
+    add_library(Freetype::Freetype STATIC IMPORTED)
+    set_target_properties(Freetype::Freetype PROPERTIES
+        IMPORTED_LOCATION "${WINBACK_FREETYPE}/release static/vs2015-2022/win64/freetype.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${WINBACK_FREETYPE}/include")
+endif()
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(RMLUI_SAMPLES OFF CACHE BOOL "" FORCE)
+set(RMLUI_PRECOMPILED_HEADERS OFF CACHE BOOL "" FORCE)
+add_subdirectory(${DEPS}/RmlUi ${CMAKE_BINARY_DIR}/RmlUi)
+
 add_subdirectory(${DEPS}/N64ModernRuntime ${CMAKE_BINARY_DIR}/N64ModernRuntime)
 # librecomp's Controller Pak functions are "no pak" stubs; WinBack saves to
 # the pak, so src/game/controller_pak.cpp provides a file-backed version.
@@ -106,9 +121,14 @@ add_executable(WinBackRecompiled
     src/main/rt64_context.cpp
     src/main/audio.cpp
     src/main/input.cpp
+    src/ui/menu.cpp
+    src/ui/ui_renderer.cpp
 )
 target_include_directories(WinBackRecompiled PRIVATE
     ${CMAKE_SOURCE_DIR}/src/main
+    ${CMAKE_SOURCE_DIR}/src/ui
+    ${CMAKE_BINARY_DIR}/src/ui/shaders
+    ${CMAKE_BINARY_DIR}/embedded
     ${DEPS}/rt64/src
     ${DEPS}/rt64/src/rhi
     ${DEPS}/rt64/src/render
@@ -117,7 +137,39 @@ target_include_directories(WinBackRecompiled PRIVATE
     ${DEPS}/rt64/src/contrib/dxc/inc
     ${CMAKE_BINARY_DIR}/rt64/src
 )
-target_link_libraries(WinBackRecompiled PRIVATE WinBackGame rt64)
+target_link_libraries(WinBackRecompiled PRIVATE WinBackGame rt64 RmlUi::Core)
+
+# Menu shaders, compiled with RT64's DXC helpers (build_vertex_shader and
+# build_pixel_shader read these variables from the calling directory).
+if (WIN32)
+    set(DXC "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxc.exe")
+else()
+    set(DXC "LD_LIBRARY_PATH=${DEPS}/rt64/src/contrib/dxc/lib/x64" "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxc-linux")
+endif()
+set(DXC_COMMON_OPTS "-I${DEPS}/rt64/src")
+set(DXC_DXIL_OPTS "-Wno-ignored-attributes")
+set(DXC_SPV_OPTS "-spirv" "-fspv-target-env=vulkan1.0" "-fvk-use-dx-layout")
+set(DXC_PS_OPTS "${DXC_COMMON_OPTS}" "-E" "PSMain" "-T ps_6_0")
+set(DXC_VS_OPTS "${DXC_COMMON_OPTS}" "-E" "VSMain" "-T vs_6_0" "-fvk-invert-y")
+build_vertex_shader(WinBackRecompiled "src/ui/shaders/InterfaceVS.hlsl" "src/ui/shaders/InterfaceVS.hlsl")
+build_pixel_shader(WinBackRecompiled "src/ui/shaders/InterfacePS.hlsl" "src/ui/shaders/InterfacePS.hlsl")
+
+# Fonts and menu documents are compiled into the executable, so the release
+# needs no extra files next to it.
+foreach(EMBED
+        assets/fonts/Lato-Bold.ttf
+        assets/fonts/Lato-BoldItalic.ttf
+        assets/fonts/Lato-BlackItalic.ttf
+        src/ui/menu.rml)
+    get_filename_component(EMBED_NAME ${EMBED} NAME)
+    string(MAKE_C_IDENTIFIER ${EMBED_NAME} EMBED_ID)
+    set(EMBED_OUT ${CMAKE_BINARY_DIR}/embedded/${EMBED_ID})
+    add_custom_command(OUTPUT ${EMBED_OUT}.c ${EMBED_OUT}.h
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/embedded
+        COMMAND file_to_c ${CMAKE_SOURCE_DIR}/${EMBED} ${EMBED_ID} ${EMBED_OUT}.c ${EMBED_OUT}.h
+        DEPENDS ${CMAKE_SOURCE_DIR}/${EMBED} file_to_c)
+    target_sources(WinBackRecompiled PRIVATE ${EMBED_OUT}.c)
+endforeach()
 target_compile_definitions(WinBackRecompiled PRIVATE
     WINBACK_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     WINBACK_VERSION_MINOR=${PROJECT_VERSION_MINOR}

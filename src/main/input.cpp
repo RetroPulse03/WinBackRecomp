@@ -16,6 +16,7 @@
 
 #include "sdl_include.hpp"
 #include "input.hpp"
+#include "menu.hpp"
 
 namespace {
 
@@ -244,6 +245,20 @@ void winback::input::poll() {
             next[i].x = c.x;
             next[i].y = c.y;
         }
+    }
+    // The game gets no input while the overlay menu is open, nor afterwards
+    // until everything is released (the press that closed the menu).
+    static bool menu_guard = false;
+    if (winback::menu::is_open()) {
+        menu_guard = true;
+    }
+    if (menu_guard) {
+        bool idle = true;
+        for (const PadState& p : next) {
+            idle &= p.buttons == 0 && p.x == 0.0f && p.y == 0.0f;
+        }
+        menu_guard = winback::menu::is_open() || !idle;
+        next = {};
     }
     std::lock_guard lock{state_mutex};
     pads = next;

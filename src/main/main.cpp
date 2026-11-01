@@ -33,6 +33,7 @@
 #include "rt64_context.hpp"
 #include "audio.hpp"
 #include "input.hpp"
+#include "menu.hpp"
 
 namespace fs = std::filesystem;
 
@@ -166,6 +167,9 @@ void update_gfx(void*) {
     }
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
+        if (winback::menu::handle_event(ev)) {
+            continue;
+        }
         switch (ev.type) {
             case SDL_QUIT:
                 ultramodern::quit();
@@ -185,6 +189,7 @@ void update_gfx(void*) {
                 break;
         }
     }
+    winback::menu::update();
 }
 
 void set_default_graphics_config() {
@@ -251,6 +256,8 @@ int main(int argc, char** argv) {
     }
     timeBeginPeriod(1);
 #endif
+    // Unbuffered, so log files keep everything up to a crash or a forced exit.
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
 
     // Portable: the stored ROM, saves, mods and renderer data all live in the
     // executable's folder, never in per-user system folders.
@@ -264,6 +271,7 @@ int main(int argc, char** argv) {
         return exit_no_rom;
     }
     set_default_graphics_config();
+    winback::menu::set_render_hooks();
 
     recomp::Configuration cfg{};
     cfg.argc = argc;

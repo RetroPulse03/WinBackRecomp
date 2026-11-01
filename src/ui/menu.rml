@@ -1,0 +1,133 @@
+<rml>
+<head>
+<title>WinBack Recompiled menu</title>
+<!--
+  Styled after WinBack's own pause menu: chrome name plates down the left
+  (cyan when selected), teal double rules at top and bottom, a dark
+  teal-to-red background, orange-to-silver italic title lettering and teal
+  hints. Sizes are in dp; 1 dp is 1/1080 of the window height.
+-->
+<style>
+body {
+    width: 100%;
+    height: 100%;
+    font-family: Lato;
+    font-weight: bold;
+    font-size: 30dp;
+    color: #e8ecef;
+    decorator: horizontal-gradient(#06262bf0 #340b0ef0);
+}
+div { display: block; }
+
+.rule {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 6dp;
+    border-top: 2dp #2ec4c0;
+    border-bottom: 2dp #2ec4c0;
+}
+#rule-top { top: 46dp; }
+#rule-bottom { bottom: 92dp; }
+
+#title {
+    position: absolute;
+    left: 7%;
+    top: 84dp;
+    height: 84dp;
+    font-size: 72dp;
+    font-weight: 900;
+    font-style: italic;
+    line-height: 84dp;
+    white-space: nowrap;
+}
+/* As on the game's pause screen, the title fades from orange on the left to
+   silver on the right; menu.cpp colours each letter along the fade. */
+#title span { font-effect: outline(2dp #1e0d04); }
+
+#subtitle {
+    position: absolute;
+    left: 7%;
+    margin-left: 4dp;
+    top: 176dp;
+    font-size: 26dp;
+    font-style: italic;
+    color: #7fe0dc;
+}
+
+#list {
+    position: absolute;
+    left: 7%;
+    top: 222dp;
+    width: 46%;
+}
+.plate {
+    height: 48dp;
+    margin-bottom: 9dp;
+    padding-left: 26dp;
+    padding-right: 20dp;
+    line-height: 48dp;
+    font-style: italic;
+    color: #15191d;
+    border: 2dp #3d4348;
+    decorator: vertical-gradient(#f4f6f8 #868d94);
+}
+.plate.selected {
+    color: #00191c;
+    border-color: #e4ffff;
+    decorator: vertical-gradient(#d4ffff #12b2c4);
+}
+.plate .tag {
+    float: right;
+    font-size: 22dp;
+    font-style: normal;
+}
+.plate .tag.basic { color: #6a3a10; }
+.plate .tag.recorded { color: #005a52; }
+.plate.selected .tag.basic { color: #4a2400; }
+.plate.selected .tag.recorded { color: #003a38; }
+.more {
+    height: 24dp;
+    padding-left: 26dp;
+    font-size: 22dp;
+    color: #7fe0dc;
+}
+
+#detail {
+    position: absolute;
+    left: 57%;
+    top: 246dp;
+    right: 5%;
+    padding: 24dp 30dp;
+    border: 2dp #2ec4c0;
+    background-color: #00000066;
+    line-height: 44dp;
+}
+#detail .head {
+    font-size: 40dp;
+    font-style: italic;
+    color: #ffb35c;
+}
+#detail .area { color: #d9dee4; font-style: italic; }
+#detail .note { font-size: 24dp; color: #9fdcd8; line-height: 34dp; margin-top: 12dp; }
+
+#hint {
+    position: absolute;
+    left: 7%;
+    bottom: 34dp;
+    font-size: 28dp;
+    color: #4fd8d2;
+}
+#hint .key { color: #e8ecef; }
+</style>
+</head>
+<body>
+    <div class="rule" id="rule-top"></div>
+    <div id="title"></div>
+    <div id="subtitle"></div>
+    <div id="list"></div>
+    <div id="detail"></div>
+    <div class="rule" id="rule-bottom"></div>
+    <div id="hint"></div>
+</body>
+</rml>
