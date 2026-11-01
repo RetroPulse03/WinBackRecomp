@@ -26,6 +26,18 @@ ignored = [
     "func_800CE0D4",
 ]
 
+# --- Audio -----------------------------------------------------------------
+
+# libmus audio thread (func_800E8B28) wakes every VI and skips the frame while
+# osAiGetStatus reports the AI FIFO full; that is what holds it to the output
+# rate (552 samples per update at 22050 Hz is 40 updates/s). The runtime's
+# osAiGetStatus always returns 0, so report a full FIFO once enough audio is
+# queued. Runs right after the osAiGetStatus call, before $v0 is copied to $s0.
+[[patches.hook]]
+func = "func_800E8B28"
+before_vram = 0x800E8B90
+text = "{ extern uint32_t winback_ai_get_status(void); ctx->r2 = winback_ai_get_status(); }"
+
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.
