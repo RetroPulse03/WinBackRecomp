@@ -1,0 +1,13 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "WinBack Recompiled",
+  "repo": "RetroPulse03/WinBackRecomp",
+  "start": {
+    "program": ["WinBackRecompiled.exe"]
+  },
+  "saves": ["{config}/WinBackRecompiled/saves"],
+  "exit_codes": {
+    "2": "No WinBack - Covert Operations (USA) ROM was selected. Start the game again and pick your big-endian .z64 ROM."
+  }
+}

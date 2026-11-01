@@ -126,7 +126,7 @@ target_compile_definitions(WinBackRecompiled PRIVATE
 if (WIN32)
     target_include_directories(WinBackRecompiled PRIVATE ${sdl2_SOURCE_DIR}/include)
     target_link_directories(WinBackRecompiled PRIVATE ${sdl2_SOURCE_DIR}/lib/x64)
-    target_link_libraries(WinBackRecompiled PRIVATE SDL2 Winmm.lib)
+    target_link_libraries(WinBackRecompiled PRIVATE SDL2 Winmm.lib Comdlg32.lib)
     add_custom_command(TARGET WinBackRecompiled POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${sdl2_SOURCE_DIR}/lib/x64/SDL2.dll"

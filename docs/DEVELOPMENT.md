@@ -23,7 +23,7 @@ sh tools/regen.sh                         # ROM -> asm, symbols, RecompiledFuncs
 tools\vsenv.cmd cmake --build build       # incremental build
 build\WinBackRecompiled.exe --console     # run with log output
 powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Shots 4
-powershell -ExecutionPolicy Bypass -File tools\package.ps1   # dist/WinBackRecompiled-v<version>-Windows.zip
+powershell -ExecutionPolicy Bypass -File tools\package.ps1   # dist/WinBackRecompiled-v<version>-Windows-x64.zip
 ```
 
 - Re-run `regen.sh` after changing `symbol_addrs.txt`, `winback.us.toml`, `winback.us.yaml` or the generators, then rebuild. CMake globs `RecompiledFuncs/`, so re-configure if the number of files changes.
@@ -50,6 +50,7 @@ These environment variables are read at startup.
 | `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons. `r@31+14` holds R for 14 seconds. |
 | `WINBACK_DLDUMP=1` | Logs every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
 | `WINBACK_GFX_API=d3d12` | Uses Direct3D 12 instead of Vulkan. |
+| `RECOMPLAUNCHER_MODE=bigpicture` | Set by RecompLauncher's controller mode; starts in fullscreen. |
 
 This sequence reaches the first mission and ends at the pause menu:
 
@@ -108,7 +109,14 @@ Versions follow [Semantic Versioning](https://semver.org/) and are tagged `vX.Y.
 
 1. Bump `project(VERSION)` in `CMakeLists.txt`.
 2. Build, then run `tools/package.ps1`.
-3. Tag the commit and attach the zip to a GitHub release.
+3. Tag the commit and attach the zip to a GitHub release. Mark test builds as pre-releases.
+
+Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [Quiver Launcher](https://quiverlauncher.com/), both of which read GitHub releases directly:
+
+- The asset name carries the system and processor (`-Windows-x64.zip`, later `-Linux-x64.AppImage`). Launchers choose the file for the player's PC from those words.
+- The executable sits at the top of the zip. Updates unpack over the install folder, so the release must not contain files the game writes at run time.
+- `recomplauncher.json` (RecompLauncher SDK level 1) sits next to the executable. It names the program, the save folder and the message for exit code 2 (no ROM selected). RecompLauncher's game check only understands disc images and folders, so the executable finds the ROM itself and shows an Open dialog when there isn't one.
+- Listing requires a submission on each site: [recompstore.com/submit](https://recompstore.com/submit?platform=pc) and [quiverlauncher.com/submit](https://quiverlauncher.com/submit).
 
 ## Roadmap
 

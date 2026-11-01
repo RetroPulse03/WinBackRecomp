@@ -1,5 +1,8 @@
 # Packages a built WinBackRecompiled.exe into a release zip:
-#   dist/WinBackRecompiled-v<version>-Windows.zip
+#   dist/WinBackRecompiled-v<version>-Windows-x64.zip
+# Launchers (RecompLauncher, Quiver Launcher) pick the release file by the
+# system and processor in its name, and expect the exe at the top of the zip
+# next to recomplauncher.json.
 #
 #   powershell -ExecutionPolicy Bypass -File tools\package.ps1 [-BuildDir build]
 param(
@@ -14,7 +17,7 @@ if (-not (Test-Path $exe)) { throw "$exe not found; build first." }
 $version = (Get-Item $exe).VersionInfo.ProductVersion
 if (-not $version) { throw "$exe has no version resource." }
 
-$name = "WinBackRecompiled-v$version-Windows"
+$name = "WinBackRecompiled-v$version-Windows-x64"
 $stage = Join-Path "dist" $name
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force $stage | Out-Null
@@ -22,7 +25,7 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 foreach ($f in "WinBackRecompiled.exe", "SDL2.dll", "dxil.dll", "dxcompiler.dll") {
     Copy-Item (Join-Path $BuildDir $f) $stage
 }
-Copy-Item README.md, LICENSE $stage
+Copy-Item README.md, LICENSE, recomplauncher.json $stage
 
 $zip = Join-Path "dist" "$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }

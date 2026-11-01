@@ -19,6 +19,7 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <commdlg.h>
 #include <timeapi.h>
 #endif
 
@@ -39,6 +40,8 @@ namespace {
 
 constexpr const char* app_title = "WinBack Recompiled";
 constexpr const char* app_folder = "WinBackRecompiled";
+// Exit code when no valid ROM was given; recomplauncher.json maps it to a message.
+constexpr int exit_no_rom = 2;
 const recomp::Version project_version{
     WINBACK_VERSION_MAJOR, WINBACK_VERSION_MINOR, WINBACK_VERSION_PATCH, WINBACK_VERSION_SUFFIX};
 
@@ -75,8 +78,36 @@ void message_box(const char* msg) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, app_title, msg, window);
 }
 
+#ifdef _WIN32
+// Asks the player for their ROM with the standard Open dialog.
+std::vector<fs::path> pick_rom() {
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrTitle = L"Select your WinBack - Covert Operations (USA) ROM";
+    ofn.lpstrFilter = L"N64 ROM (*.z64)\0*.z64\0All files\0*.*\0";
+    ofn.lpstrFile = file;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameW(&ofn)) {
+        return {};
+    }
+    return {fs::path(file)};
+}
+#endif
+
+bool select_rom_from(const std::vector<fs::path>& candidates) {
+    for (const fs::path& c : candidates) {
+        if (recomp::select_rom(c, winback::game_id) == recomp::RomValidationError::Good) {
+            std::printf("[winback] using ROM %s\n", c.string().c_str());
+            return true;
+        }
+    }
+    return false;
+}
+
 // Stores the ROM with the runtime on first run: --rom, then any .z64 next to
-// the exe or in the working directory.
+// the exe or in the working directory, then one the player picks.
 bool ensure_rom() {
     if (recomp::is_rom_valid(winback::game_id)) {
         return true;
@@ -94,19 +125,28 @@ bool ensure_rom() {
             }
         }
     }
-    for (const fs::path& c : candidates) {
-        if (recomp::select_rom(c, winback::game_id) == recomp::RomValidationError::Good) {
-            std::printf("[winback] using ROM %s\n", c.string().c_str());
+    if (select_rom_from(candidates)) {
+        return true;
+    }
+#ifdef _WIN32
+    while (true) {
+        std::vector<fs::path> picked = pick_rom();
+        if (picked.empty()) {
+            break;
+        }
+        if (select_rom_from(picked)) {
             return true;
         }
+        message_box("That file isn't a WinBack - Covert Operations (USA) ROM.\n\n"
+                    "A big-endian .z64 dump of the USA release is needed.");
     }
+#endif
     message_box("WinBack - Covert Operations (USA) ROM not found.\n\n"
                 "Place your big-endian .z64 ROM next to the executable, or run with --rom <path>.");
     return false;
 }
 
 ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
-    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         message_box(SDL_GetError());
         std::exit(EXIT_FAILURE);
@@ -203,6 +243,9 @@ void open_console() {
 
 int main(int argc, char** argv) {
     bool console = std::getenv("WINBACK_DEBUG") != nullptr;
+    // RecompLauncher's controller-focused Big Picture mode.
+    const char* launcher_mode = std::getenv("RECOMPLAUNCHER_MODE");
+    fullscreen = launcher_mode != nullptr && std::strcmp(launcher_mode, "bigpicture") == 0;
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
             rom_arg = argv[++i];
@@ -232,7 +275,7 @@ int main(int argc, char** argv) {
     }
     recomp::check_all_stored_roms();
     if (!ensure_rom()) {
-        return EXIT_FAILURE;
+        return exit_no_rom;
     }
     set_default_graphics_config();
 
