@@ -12,10 +12,6 @@ If the game freezes or crashes, please [open an issue](https://github.com/RetroP
 
 ## Installing
 
-**With [N64RecompLauncher](https://github.com/SirDiabo/N64RecompLauncher):** install WinBack Recompiled from the launcher's list.
-
-**Manually:**
-
 1. Download `WinBackRecompiled-vX.Y.Z-Windows.zip` from [Releases](https://github.com/RetroPulse03/WinBackRecomp/releases) and extract it.
 2. Put your ROM next to `WinBackRecompiled.exe`, or run it once with `--rom <path>`. The ROM is verified and stored in `%APPDATA%\WinBackRecompiled`, so this is only needed the first time.
 3. Run `WinBackRecompiled.exe`.

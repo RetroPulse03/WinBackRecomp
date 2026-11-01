@@ -110,8 +110,6 @@ Versions follow [Semantic Versioning](https://semver.org/) and are tagged `vX.Y.
 2. Build, then run `tools/package.ps1`.
 3. Tag the commit and attach the zip to a GitHub release.
 
-[N64RecompLauncher](https://github.com/SirDiabo/N64RecompLauncher) selects the asset whose name contains `Windows` and expects the executable at the top level of the archive.
-
 ## Roadmap
 
 1. **Soak testing:** longer sessions through more missions, menus, game over and cutscenes, patching new spin loops. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
