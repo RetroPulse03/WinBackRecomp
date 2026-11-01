@@ -22,6 +22,8 @@ ignored = [
     "func_800E3D88",
     # Busy-waits on the pending graphics task counter.
     "func_800ECC20",
+    # Jump table walked by pointer, which N64Recomp can't resolve.
+    "func_800CE0D4",
 ]
 
 # --- Busy-wait loops -------------------------------------------------------

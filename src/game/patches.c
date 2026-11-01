@@ -27,3 +27,37 @@ RECOMP_FUNC void func_800ECC20(uint8_t* rdram, recomp_context* ctx) {
         yield_self_1ms(rdram);
     }
 }
+
+void func_800CDF50(uint8_t* rdram, recomp_context* ctx);
+
+// Copies the fields selected by a bitmask into a 7-byte record:
+//     if (s->count_176B > 0) {
+//         for (i = 0; i < 6; i++)
+//             if (mask & (1 << i)) switch (i) { ... }
+//         func_800CDF50(s);
+//     }
+// GCC walks the jump table (jtbl_8011B6E0) with a pointer instead of indexing
+// it, so N64Recomp can't find the table and the jr falls through to a lookup.
+RECOMP_FUNC void func_800CE0D4(uint8_t* rdram, recomp_context* ctx) {
+    gpr s = ctx->r4;
+    uint32_t mask = (uint32_t)ctx->r5;
+    gpr values = ctx->r6;
+    gpr dst = s + 0x1958;
+    int i;
+
+    if ((int8_t)MEM_B(0x176B, s) <= 0) {
+        return;
+    }
+    for (i = 0; i < 6; i++) {
+        if (((int32_t)mask >> i) & 1) {
+            int32_t v = MEM_W(i * 4, values);
+            if (i == 0) {
+                MEM_H(0, dst) = (int16_t)v;
+            } else {
+                MEM_B(i + 1, dst) = (int8_t)v;
+            }
+        }
+    }
+    ctx->r4 = s;
+    func_800CDF50(rdram, ctx);
+}
