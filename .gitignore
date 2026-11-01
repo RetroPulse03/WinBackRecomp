@@ -19,3 +19,4 @@ deps/
 build/
 *.log
 setup_status.txt
+captures/

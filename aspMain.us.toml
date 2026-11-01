@@ -1,15 +1,18 @@
-# RSPRecomp config - WinBack audio microcode (libultra n_audio aspMain).
-# Text at ROM 0xD9F30 (vram 0x800FEB30, right after rspboot); data at ROM
-# 0xEFF20 (vram 0x80114B20). F3DEX2 2.08 text follows at ROM 0xDAD50 and is
-# handled by RT64.
-text_offset = 0xD9F30
-text_size = 0xE20
+# RSPRecomp config - WinBack audio microcode (the one libmus uses).
+# Audio tasks carry ucode 0x800FF950 (ROM 0xDAD50, 0xC60 bytes) and
+# ucode_data 0x80114DE0 (ROM 0xF01E0). F3DEX2 2.08 text follows at ROM
+# 0xDB9B0 and goes to RT64. (Another audio ucode sits at ROM 0xD9F30 with
+# data at 0xEFF20; the game never runs it.)
+text_offset = 0xDAD50
+text_size = 0xC60
 text_address = 0x04001080
 rom_file_path = "baserom.us.z64"
 output_file_path = "rsp/aspMain.cpp"
 output_function_name = "aspMain"
-# Audio command jump table: halfwords at DMEM 0x10 (ucode data + 0x10).
+# Command jump table: halfwords at DMEM 0x0 (ucode data + 0). The RSP PC is
+# 12 bits, so entry 14 (0x02B0) is IMEM 0x12B0; entries 7 and 8 are 0
+# (unused commands).
 extra_indirect_branch_targets = [
-    0x1118, 0x1470, 0x11DC, 0x1B38, 0x1214, 0x187C, 0x1254, 0x12D0,
-    0x12EC, 0x1328, 0x140C, 0x1294, 0x1E24, 0x138C, 0x170C, 0x144C
+    0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208,
+    0x127C, 0x1348, 0x1248, 0x1C84, 0x12D4, 0x12B0, 0x1384
 ]

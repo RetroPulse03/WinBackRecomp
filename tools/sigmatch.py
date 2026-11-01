@@ -13,12 +13,17 @@ for trailing alignment padding). Without it every word offset is tried, which
 gives many false positives on short signatures.
 
 Usage: python tools/sigmatch.py <rom.z64> <signatures.sig> <text_rom_start>
-       <text_rom_end> <vram_start> [asm_dir [lib_vram_start]]
+       <text_rom_end> <vram_start> [asm_dir [lib_vram_start [manual_syms]]]
        > symbol_addrs.libultra.txt
 
 lib_vram_start: function matches below this address (in game code) are
 dropped; game code is full of small routines that collide with library
 signatures.
+
+manual_syms: a splat symbol file (symbol_addrs.txt); addresses named there
+win over signature matches. Some functions differ only in a relocated
+address (osViGetCurrentFramebuffer/osViGetNextFramebuffer), which the
+signatures mask out.
 """
 import glob
 import re
@@ -94,6 +99,12 @@ def main():
     start, end, vram0 = (int(x, 16) for x in sys.argv[3:6])
     funcs = load_funcs(sys.argv[6]) if len(sys.argv) > 6 else None
     lib_start = int(sys.argv[7], 16) if len(sys.argv) > 7 else 0
+    manual = set()
+    if len(sys.argv) > 8:
+        for line in open(sys.argv[8]):
+            m = re.match(r"\s*\w+\s*=\s*0x([0-9A-Fa-f]+);", line)
+            if m:
+                manual.add(int(m.group(1), 16))
 
     # Group signatures by the reloc mask over their first 8 bytes so each ROM
     # offset needs one crcA per distinct mask.
@@ -150,6 +161,8 @@ def main():
     # A name may be found at several addresses (static copies); keep all but
     # disambiguate.
     seen = defaultdict(int)
+    for addr in manual:
+        names.pop(addr, None)
     for addr in sorted(names):
         n, kind = names[addr]
         seen[n] += 1

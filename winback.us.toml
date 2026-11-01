@@ -8,12 +8,29 @@ symbols_file_path = "winback.us.syms.toml"
 rom_file_path = "baserom.us.z64"
 output_func_path = "RecompiledFuncs"
 functions_per_output_file = 200
+# Debug: calls TRACE_ENTRY() (src/game/trace.h) at every function entry.
+trace_mode = true
 
 [patches]
 # Functions that touch hardware the runtime emulates at a higher level.
 stubs = [
 ]
 
-# Replaced by hand-written versions in src/game/.
+# Replaced by hand-written versions in src/game/patches.c.
 ignored = [
+    # Idle thread busy loop.
+    "func_800E3D88",
+    # Busy-waits on the pending graphics task counter.
+    "func_800ECC20",
 ]
+
+# --- Busy-wait loops -------------------------------------------------------
+# The runtime only switches game threads at OS calls, so loops that poll
+# memory set by another thread get a yield at their head.
+
+# Main loop: while (D_80187FB8 == state); waits for the frame callback
+# (func_8004BA40) to change the game state.
+[[patches.hook]]
+func = "func_80025D94"
+before_vram = 0x80025EE0
+text = "{ extern void yield_self_1ms(uint8_t*); yield_self_1ms(rdram); }"

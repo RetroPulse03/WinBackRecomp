@@ -11,3 +11,8 @@ __osDevMgrMain = 0x800EF400; // type:func
 __scMain = 0x800F6228; // type:func
 viMgrMain = 0x800F76E0; // type:func
 send_mesg = 0x800FAF6C; // type:func
+
+// Same code as osViGetCurrentFramebuffer but reads __osViNext; signatures
+// can't tell them apart.
+osViGetNextFramebuffer = 0x800F7500; // type:func
+__osViNext = 0x801149F4;

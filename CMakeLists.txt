@@ -21,6 +21,11 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
 endif()
 if (WIN32)
     add_compile_definitions(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR NOMINMAX)
+    # SDL2's headers define _m_prefetch themselves unless this guard is set;
+    # recent clang provides it as a builtin and rejects the redefinition.
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_definitions(__PRFCHWINTRIN_H)
+    endif()
 endif()
 
 set(DEPS ${CMAKE_SOURCE_DIR}/deps)
@@ -47,11 +52,20 @@ set(RT64_SDL_WINDOW_VULKAN TRUE)
 add_compile_definitions(HLSL_CPU)
 add_subdirectory(${DEPS}/rt64 ${CMAKE_BINARY_DIR}/rt64)
 target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
+# RT64 builds with -Werror; newer compilers add warnings in its contrib code.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(rt64 PRIVATE -Wno-error)
+endif()
 if (WIN32)
     target_include_directories(rt64 BEFORE PRIVATE ${sdl2_SOURCE_DIR}/include)
 endif()
 
 add_subdirectory(${DEPS}/N64ModernRuntime ${CMAKE_BINARY_DIR}/N64ModernRuntime)
+# librecomp's Controller Pak functions are "no pak" stubs; WinBack saves to
+# the pak, so src/game/controller_pak.cpp provides a file-backed version.
+get_target_property(LIBRECOMP_SRCS librecomp SOURCES)
+list(FILTER LIBRECOMP_SRCS EXCLUDE REGEX "src/pak\.cpp$")
+set_property(TARGET librecomp PROPERTY SOURCES ${LIBRECOMP_SRCS})
 
 # --- Game library: recompiled code + glue ----------------------------------
 file(GLOB WINBACK_FUNC_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/funcs_*.c)
@@ -61,6 +75,9 @@ add_library(WinBackGame STATIC
     RecompiledFuncs/lookup.cpp
     rsp/aspMain.cpp
     src/game/winback_game.cpp
+    src/game/controller_pak.cpp
+    src/game/debug_stats.cpp
+    src/game/patches.c
 )
 target_include_directories(WinBackGame PUBLIC
     ${CMAKE_SOURCE_DIR}/src/game

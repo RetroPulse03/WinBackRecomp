@@ -19,6 +19,7 @@
 #include "ultramodern/ultramodern.hpp"
 
 #include "rt64_context.hpp"
+#include "debug_stats.hpp"
 
 namespace {
 
@@ -196,6 +197,7 @@ public:
     }
 
     void send_dl(const OSTask* task) override {
+        winback::stats::gfx_tasks++;
         app->state->rsp->reset();
         app->interpreter->loadUCodeGBI(task->t.ucode & 0x3FFFFFF, task->t.ucode_data & 0x3FFFFFF, true);
         app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & 0x3FFFFFF, 0, true);
@@ -205,7 +207,10 @@ public:
     // boots straight into the game.
     void send_dummy_workload(uint32_t) override {}
 
-    void update_screen() override { app->updateScreen(); }
+    void update_screen() override {
+        winback::stats::screen_updates++;
+        app->updateScreen();
+    }
 
     void shutdown() override {
         if (app) {

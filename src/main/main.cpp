@@ -18,6 +18,7 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <timeapi.h>
 #endif
 
 #include "librecomp/game.hpp"

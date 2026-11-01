@@ -21,9 +21,9 @@ time: no `jal`/`j` in the code targets anything outside it.
 |---|---|
 | `0x001000`–`0x0D9E60` | CPU code: game (`0x80025C00`–`0x800E3C90`), then libmus, n_audio/al, libultra, libc, GCC long-long helpers |
 | `0x0D9E60`–`0x0D9F30` | rspboot |
-| `0x0D9F30`–`0x0DAD50` | n_audio `aspMain` text (0xE20 bytes) → RSPRecomp |
-| `0x0DAD50`– | F3DEX2 / L3DEX2 2.08 text → RT64 |
-| `0x0EFF20` | n_audio `aspMain` data (command table at +0x10) |
+| `0x0D9F30`–`0x0DAD50` | audio ucode text (0xE20 bytes, unused by the game; data at `0x0EFF20`) |
+| `0x0DAD50`–`0x0DB9B0` | libmus audio ucode text (0xC60 bytes) → RSPRecomp; data at `0x0F01E0` (vram `0x80114DE0`) |
+| `0x0DB9B0`– | F3DEX2 / L3DEX2 2.08 text → RT64 |
 | `0x0F0628` | F3DEX2 / L3DEX2 version strings (in ucode data) |
 | BSS | `0x8011D3B0`, size `0xBE350` |
 
