@@ -53,6 +53,9 @@ These environment variables are read at startup.
 | `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons. `r@31+14` holds R for 14 seconds. |
 | `WINBACK_DLDUMP=1` | Logs every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
 | `WINBACK_GFX_API=d3d12` | Uses Direct3D 12 instead of Vulkan. |
+| `WINBACK_JUMP=5@20,12.1@60` | Level Select jumps at the given seconds: stage 5's start at 20 s, then stage 12's first checkpoint at 60 s. |
+| `WINBACK_MENUPRESS=select@6,a@8,down@9` | Scripts recomp menu presses: `select up down left right a b`. |
+| `WINBACK_RECORD_AT=34` | Records the game's current checkpoint snapshot at that second, as if a checkpoint had triggered. |
 | `RECOMPLAUNCHER_MODE=bigpicture` | Set by RecompLauncher's controller mode; starts in fullscreen. |
 
 This sequence reaches the first mission and ends at the pause menu:
@@ -87,7 +90,7 @@ The game uses the audio microcode at ROM `0xDAD50`, size `0xC60` (`config/aspMai
 
 ### Saves
 
-The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in `saves/` next to the executable. librecomp's `pak.cpp` is excluded from the build.
+The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in `saves/` next to the executable. librecomp's `pak.cpp` is excluded from the build. Level Select's recorded checkpoints are in `saves/checkpoints/` (see below).
 
 ### Portable data
 
@@ -105,6 +108,30 @@ Changes to dependencies live in `patches/<dep>/*.patch`. `tools/fetch_deps.sh` a
 |---|---|
 | `rt64/0001-f3dex2-stateful-texrect.patch` | In F3DEX2, `G_TEXRECT` only stores its words and `G_RDPHALF_2` issues the rectangle. WinBack writes a 16-byte texrect before the sky cloud plane to load TMEM. RT64 drew it (a grey square) and consumed the following `G_MTX`, so no clouds were drawn. |
 | `rt64/0002-l3dex2-line3d.patch` | The laser sight uses L3DEX2 2.08 `G_LINE3D`, which RT64 left unimplemented. The line is drawn as a screen-space quad built the same way as the microcode's RDP primitive (handler at IMEM `0x1618`). Its width is `(w0 & 0xFF) + 3` quarter-pixels on each side: horizontal for steep lines, vertical with square ends for shallow ones. Lines ignore culling, and L3DEX2 TRI1/TRI2 draw wireframes. |
+
+## Recomp menu
+
+`src/ui/menu.cpp` is the overlay menu. Select (`SDL_CONTROLLER_BUTTON_BACK`) or Escape toggles it from the window thread, which turns input into menu actions and keeps the menu state. RT64's render hooks (`RT64::SetRenderHooks`, set before the renderer starts) create RmlUi on the renderer's thread and draw it into the swap chain after the game on every present. While the menu is open, `input.cpp` sends the game no input, and keeps doing so after it closes until every button is released. The game itself keeps running.
+
+- `src/ui/ui_renderer.cpp` is the RmlUi render interface on RT64's RHI, adapted from Zelda64Recomp's. It uses RmlUi's compatibility interface with generated textures only. RmlUi's vertex colours are premultiplied but its font textures aren't, so the pixel shader premultiplies the texture and blending is `ONE / INV_SRC_ALPHA`.
+- `src/ui/menu.rml` holds the layout and style. It is compiled into the executable with the Lato fonts (`file_to_c`), so the release needs no extra files. Sizes are in `dp`, where 1080 dp is the window height. The look imitates the game's pause screen. Reading the game's own plate textures and fonts from the ROM at run time is a later step.
+- The visible rows are rebuilt as RML whenever the state changes. Only 10 rows are shown at a time.
+
+## Level Select
+
+`src/game/level_select.cpp` lists the stages, performs jumps and records checkpoints. Its hooks are in the Level Select section of `config/winback.us.toml`.
+
+**Catalogue.** It is read from the ROM on first use. `D_8010D5F4[stage]` is a stage's first map, and its maps run up to the next stage's first map (64 maps). Entering map `m` loads event file `m + 1` from the archive at ROM `0x931470` (`u32 count`, then `count + 1` offsets from the archive start). An event file has `u16 count, condition offset, script offset` and then 8-byte events (`id, ?, condition, script`). Each script is a `u16` command count followed by commands: an opcode byte, then the arguments listed in `D_8010DF38[opcode]` (`flags, argc, u16 mask of 2-byte arguments`). The checkpoint opcode is the one whose `func_8009AA9C` jump table entry is `0x8009BADC`, and its first argument is the checkpoint id. The opcode at `0x8009BA34` loads another event file, which is scanned too. Each stage's checkpoints are its unique (map, id) pairs in script order. The area name is one of the game's four (`char*` table at `0x80111EF0`), chosen from the first map's area group in `D_8010D5A0`: 0-8 OUTER GROUND, 9-15 MAIN OFFICE, 16-19 FACTORY, 20 and above CONTROL CENTER. These ranges are inferred from how the groups run through the stages.
+
+**Game state.** `D_80187FB8` is the main loop state: 0 runs the front end (`func_80073600` each frame), 1 gameplay (`func_8004BA40`). In the front end, `D_8010DBEA = 2` with a mode in `D_8010DBE9` (`func_8008F29C`) switches to gameplay after a 15-frame fade, setting `D_8016A41C = 0x0101` (normal play). The title intro and attract demo are gameplay with `D_8016A41C = 0x0808`, which skips loading event scripts, and `D_801390D4 = 1`. During gameplay, `D_8016A418 = 1` with a map in `D_8016A41A` makes the frame callback reload into that map, as doors and map-change scripts do. A checkpoint is the event block `D_80137990` (0x89C bytes; id at `+0x894`, map at `+0x895`) plus the progress block `D_80158760` (0x12E0 bytes; difficulty at `+0`, stage at `+1`, health at `+2`). `func_8009C8E0` copies both to `D_8011DAB0` / `D_8011E350`, and `func_8009C998` restores them. `func_8008EF28` resets the mission (clears the event block and the progress block's first 0xA0 bytes, the save record) and makes the next stage init take a start snapshot.
+
+**Jumps** run in the frame callback hooks on the game thread.
+
+- *Stage start:* `func_8008EF28`, keeping the difficulty and setting health to 100, then `func_8008EEAC(stage)`. From the front end the game then enters gameplay through `func_8008F29C(9)`, like New Game. During gameplay the map reload request is used instead.
+- *Recorded checkpoint:* the snapshot is copied into `D_8011DAB0` / `D_8011E350`, then `func_8008EF28` + `func_8009C998` as on the continue screen, followed by the same transition.
+- *Basic checkpoint:* a stage start. When the stage init takes its start snapshot (hook after `0x8004C068`), the snapshot's checkpoint id and map are replaced with the target's, and the next gameplay frame restores it like a recorded one.
+
+**Recording.** A hook after the script checkpoint command's `func_8009C8E0` call (`0x8009BB00`) marks the checkpoint. The command still changes the saved copy afterwards, so the next frame writes `saves/checkpoints/stageSS_mapMM_cpIII.bin`: `WBCP`, then the two saved blocks in N64 byte order. Checkpoints aren't recorded during attract demos, or after a basic load until the next stage start or recorded load, because their state would be the basic one. Map entry scripts often trigger a checkpoint straight away, so this matters.
 
 ### Graphics API
 
@@ -127,7 +154,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 ## Roadmap
 
-1. **Recomp menu and Level Select:** the Select button opens an overlay menu at any time (RmlUi, in the style of the other N64Recomp projects; the game still boots straight into its own title screen). The first entry is Level Select: pick a stage, then one of its checkpoints, and the game jumps there. This makes every later test start where it's needed.
+1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
 3. **Settings:** controls (Classic/Modern, remapping), graphics (including the graphics API), audio, added to the same menu.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.

@@ -26,6 +26,8 @@ foreach ($f in "WinBackRecompiled.exe", "SDL2.dll", "dxil.dll", "dxcompiler.dll"
     Copy-Item (Join-Path $BuildDir $f) $stage
 }
 Copy-Item README.md, LICENSE, recomplauncher.json $stage
+# The menu font is compiled into the exe; its license travels with it.
+Copy-Item assets\fonts\OFL.txt (Join-Path $stage "Lato-OFL.txt")
 
 $zip = Join-Path "dist" "$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }

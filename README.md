@@ -44,6 +44,7 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 | Y / T / G / H | C-Up / C-Left / C-Down / C-Right |
 | Arrow keys | D-Pad |
 | Enter | Start |
+| Esc | Recomp menu |
 
 **Controller** (Classic layout, as in the PlayStation 2 release):
 
@@ -60,8 +61,19 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 | Right stick click | Camera behind player | C-Left/C-Right twice |
 | D-pad down | Place / detonate C4 | D-Down |
 | Start | Pause | Start |
+| Select (Back/View) | Recomp menu | - |
 
 In menus and on the pause screen, A confirms and B goes back.
+
+### Recomp menu and Level Select
+
+Press Select (or Esc) at any time to open the recomp menu over the game; press it again to close it. The game gets no input while the menu is open. Move with the D-pad, left stick or arrow keys, choose with A (Enter) and go back with B (Backspace).
+
+**Level Select** lists stages 00 to 30 with their area. Choose a stage, then its **Stage start** or one of its checkpoints, and the game jumps there from wherever you are, including the title screen.
+
+- A checkpoint becomes **RECORDED** the first time you reach it in normal play. The game's own checkpoint data is saved to `saves/checkpoints/`, and the menu loads exactly that state from then on.
+- Until then it is **BASIC**: a fresh start of the stage with you placed at the checkpoint. Items, opened doors and other progress from earlier in the stage are missing, so some areas can behave differently than in normal play. Checkpoints reached after a BASIC load aren't recorded.
+- **Stage start** begins the stage as the game does, with its opening scene, full health and starting equipment.
 
 Players 2-4 use additional controllers.
 
@@ -97,6 +109,8 @@ tools\vsenv.cmd cmake --build build
 | `config/aspMain.us.toml` | RSPRecomp configuration (audio microcode) |
 | `src/game/` | Game registration, patches and Controller Pak |
 | `src/main/` | Host application: window, renderer, audio, input |
+| `src/ui/` | Recomp menu (RmlUi), its RT64 renderer and shaders |
+| `assets/fonts/` | Menu font (Lato, SIL Open Font License), compiled into the executable |
 | `patches/` | Patches applied to dependencies |
 | `tools/` | Code generators and build helpers |
 | `docs/` | Development notes and ROM map |
@@ -113,6 +127,8 @@ These folders are created locally and never committed: `game/` (the playable gam
 | RT64 | `23cab603c4f9f4a8b369b38e036f1aa484603878` (plus `patches/rt64`) |
 | splat64 | 0.50.1 |
 | SDL2 (Windows) | 2.30.3 |
+| RmlUi | `7a06f27db04fe5d13a5dacc19b2b4544673a4eca` (6.0) |
+| FreeType (Windows binaries) | `d6fb49d11a9d0011bf4ecfe7e570beaaa189838a` |
 
 ## License
 
@@ -127,3 +143,6 @@ WinBack is a trademark of its respective owners. This project is not affiliated 
 - [splat](https://github.com/ethteck/splat)
 - [n64sym](https://github.com/shygoo/n64sym) signatures: shygoo
 - [SDL2](https://www.libsdl.org/)
+- [RmlUi](https://github.com/mikke89/RmlUi) and [FreeType](https://freetype.org/) for the recomp menu
+- [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp): the RmlUi renderer for RT64 that `src/ui/ui_renderer.cpp` is adapted from
+- [Lato](https://www.latofonts.com/) font: Łukasz Dziedzic, under the SIL Open Font License (`assets/fonts/OFL.txt`)
