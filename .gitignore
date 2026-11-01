@@ -20,3 +20,5 @@ build/
 *.log
 setup_status.txt
 captures/
+dist/
+CLAUDE.local.md

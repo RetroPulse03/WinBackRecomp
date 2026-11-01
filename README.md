@@ -1,38 +1,62 @@
 # WinBack Recompiled
 
-A native PC port of **WinBack: Covert Operations** (N64, USA) made by static recompilation: the game's MIPS code is translated to C and compiled for x64, with [RT64](https://github.com/rt64/rt64) rendering through Direct3D 12 or Vulkan. No emulator.
+A native PC port of **WinBack: Covert Operations** (N64, USA), made by static recompilation. The game's MIPS code is translated to C and compiled for x64 using [N64Recomp](https://github.com/N64Recomp/N64Recomp), and [RT64](https://github.com/rt64/rt64) renders it. There is no emulator.
 
-> **No game data is included.** You need your own ROM: *WinBack - Covert Operations (USA)*, big-endian `.z64`, SHA-1 `fa04477b321a95e1f7a2edcac5c09bfa6ef72041`. Everything game-specific is generated from it on your machine.
+> **No game data is included.** You need your own copy of the game: *WinBack - Covert Operations (USA)*, big-endian `.z64`, SHA-1 `fa04477b321a95e1f7a2edcac5c09bfa6ef72041`.
 
 ## Status
 
-**Boots and plays.** Verified on Windows 11 (Direct3D 12): intro cutscenes → title screen → Controller Pak save → first mission (Outer Ground) with the pause/map menu, at 60 fps with audio tasks running every frame. Only short scripted sessions have been tested so far.
+**Early release (v0.1).** The game plays from boot, through the intros, title screen and Controller Pak save, into the first mission at 60 fps. Mission 1 has been play-tested by hand, including aiming with the laser sight. Later missions haven't been tested much yet.
 
-Known issues:
-- A grey square is drawn behind the "GO INTO MISSION!" banner (rendering bug, not investigated yet).
-- Only the paths exercised so far are verified; more busy-wait loops may exist (`tools/find_spinloops.py`). The symptom is a freeze with one game thread spinning.
+If the game freezes or crashes, please [open an issue](https://github.com/RetroPulse03/WinBackRecomp/issues) and say where it happened. Running `WinBackRecompiled.exe --console` shows a log that helps with diagnosis.
 
-How it got here: all ~2,086 functions recompile with no hand edits. The game-specific fixes are three busy-wait loops (idle thread, graphics task counter, main loop state wait) patched to yield to the runtime, plus a file-backed Controller Pak replacing the runtime's "no pak" stub.
+## Installing
+
+**With [N64RecompLauncher](https://github.com/SirDiabo/N64RecompLauncher):** install WinBack Recompiled from the launcher's list.
+
+**Manually:**
+
+1. Download `WinBackRecompiled-vX.Y.Z-Windows.zip` from [Releases](https://github.com/RetroPulse03/WinBackRecomp/releases) and extract it.
+2. Put your ROM next to `WinBackRecompiled.exe`, or run it once with `--rom <path>`. The ROM is verified and stored in `%APPDATA%\WinBackRecompiled`, so this is only needed the first time.
+3. Run `WinBackRecompiled.exe`.
+
+Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 
 ## Playing
 
-1. Put your ROM next to `WinBackRecompiled.exe` (or run it once with `--rom <path>`). The ROM is checked and stored in `%APPDATA%\WinBackRecompiled`, so you only do this once.
-2. Run `WinBackRecompiled.exe`. Options: `--fullscreen`, `--developer` (RT64 debug UI). Toggle fullscreen with F11 or Alt+Enter.
+| Option | Effect |
+|---|---|
+| `--fullscreen` | Start in fullscreen. F11 or Alt+Enter toggles it at any time. |
+| `--console` | Show log output. |
+| `--developer` | Show RT64's debug interface. |
 
-**Controls.** Keyboard (player 1): WASD = stick, F = A, R = B, Space = Z, Q = L, E = R, Y/T/G/H = C-up/left/down/right, arrows = D-pad, Enter = Start. Gamepad: left stick, A = A, X = B, B = C-down, Y = C-left, LB = L, RB/RT = R, LT = Z, right stick = C-buttons, Start. Players 2–4 use more gamepads.
+**Keyboard (player 1)**
 
-Saves go to the emulated Controller Pak: `%APPDATA%\WinBackRecompiled\saves\controller_pak_1.bin`.
+| Key | Button |
+|---|---|
+| W A S D | Analog stick |
+| F / R | A / B |
+| Space | Z |
+| Q / E | L / R |
+| Y / T / G / H | C-Up / C-Left / C-Down / C-Right |
+| Arrow keys | D-Pad |
+| Enter | Start |
 
-## Building (Windows)
+**Controller:** left stick = analog stick, A = A, X = B, B = C-Down, Y = C-Left, LB = L, RB or RT = R, LT = Z, right stick = C buttons, Start = Start. Players 2-4 use additional controllers.
 
-Requirements: Visual Studio 2022+ Build Tools (C++), LLVM/Clang, CMake, Ninja, Python 3, Git.
+Saves are stored on an emulated Controller Pak at `%APPDATA%\WinBackRecompiled\saves\`.
+
+## Building from source
+
+Requirements: Visual Studio 2022 or later Build Tools (C++), LLVM/Clang, CMake, Ninja, Python 3 and Git.
 
 ```
 python -m venv .venv
 .venv\Scripts\python -m pip install "splat64[mips]" xxhash pyyaml
+sh tools/fetch_deps.sh
 ```
 
-Run `sh tools/fetch_deps.sh` to clone the pinned dependencies into `deps/`, build `deps/N64Recomp` (commands in that script), put the ROM in the repo root as `baserom.us.z64`, then:
+Build `deps/N64Recomp` using the commands in the header of `tools/fetch_deps.sh`. Then put the ROM in the repository root as `baserom.us.z64` and run:
 
 ```
 sh tools/regen.sh
@@ -40,33 +64,20 @@ tools\vsenv.cmd cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE
 tools\vsenv.cmd cmake --build build
 ```
 
-## How it's generated
+`tools/regen.sh` generates all game-specific code from your ROM. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [docs/ROM_MAP.md](docs/ROM_MAP.md) describes the ROM layout.
 
-`tools/regen.sh` rebuilds everything derived from the ROM:
+## Project layout
 
-1. **splat** splits the ROM using `winback.us.yaml` and disassembles the code segment.
-2. **`tools/sigmatch.py`** identifies libultra, libc, n_audio and libmus functions by matching n64sym's signature data against the functions splat found. The runtime replaces those functions with native versions, so their names matter.
-3. splat runs again with those names.
-4. **`tools/gen_recomp_syms.py`** writes N64Recomp's symbol file. It also adds entry points where GCC's tail-merging jumps into the middle of another function.
-5. **N64Recomp** writes `RecompiledFuncs/`, and **RSPRecomp** writes `rsp/aspMain.cpp` (audio microcode).
-
-`gen_recomp_syms.py` also extends functions whose jump tables reach into a tail that splat split off.
-
-`tools/find_spinloops.py` lists busy-wait loops that may need patching.
-
-**Debugging:** `WINBACK_DEBUG=1` prints per-second task counts. Every 5 seconds it adds each game thread's recent calls (N64Recomp trace mode) and OSThread states, and it prints a trace on a crash. `WINBACK_WATCH=addr,...` adds memory words to that dump. `WINBACK_AUTOPRESS=start@6,a@10,...` scripts player 1's buttons. `tools/capture_test.ps1` runs the game and screenshots its window. See `docs/ROM_MAP.md` for the ROM layout.
-
-## Layout
-
-| Path | What |
+| Path | Contents |
 |---|---|
-| `winback.us.yaml` | splat config |
-| `symbol_addrs.txt` | hand-maintained names; add names here as functions are identified |
-| `winback.us.toml` | N64Recomp config (stubs, ignored functions, hooks) |
-| `aspMain.us.toml` | RSPRecomp config (audio microcode) |
-| `src/game/` | game registration and the file-backed Controller Pak |
-| `src/main/` | host app: SDL window, RT64, audio, input |
-| `tools/` | generators and build helpers |
+| `winback.us.yaml` | splat configuration |
+| `symbol_addrs.txt` | Hand-maintained symbol names |
+| `winback.us.toml` | N64Recomp configuration (stubs, replaced functions, hooks) |
+| `aspMain.us.toml` | RSPRecomp configuration (audio microcode) |
+| `src/game/` | Game registration, patches and Controller Pak |
+| `src/main/` | Host application: window, renderer, audio, input |
+| `patches/` | Patches applied to dependencies |
+| `tools/` | Code generators and build helpers |
 
 ## Pinned versions
 
@@ -74,12 +85,20 @@ tools\vsenv.cmd cmake --build build
 |---|---|
 | N64Recomp | `ffb39cdad1da5de07eaaa48bd1db4a89a7986771` |
 | N64ModernRuntime | `cdf5abbd5026fef5c364c676e4667c45e42b6863` |
-| RT64 | `23cab603c4f9f4a8b369b38e036f1aa484603878` |
+| RT64 | `23cab603c4f9f4a8b369b38e036f1aa484603878` (plus `patches/rt64`) |
 | splat64 | 0.50.1 |
 | SDL2 (Windows) | 2.30.3 |
 
 ## License
 
-GPL-3.0 (N64ModernRuntime is GPL-3.0). WinBack is a trademark of its owners; this project is not affiliated with them.
+GPL-3.0, as required by N64ModernRuntime. See [LICENSE](LICENSE).
 
-Credits: [N64Recomp and N64ModernRuntime](https://github.com/N64Recomp) (Wiseguy and contributors), [RT64](https://github.com/rt64/rt64) (Dario and contributors), [splat](https://github.com/ethteck/splat), [n64sym](https://github.com/shygoo/n64sym) signatures (shygoo), SDL2.
+WinBack is a trademark of its respective owners. This project is not affiliated with or endorsed by them, and it contains no game assets.
+
+## Credits
+
+- [N64Recomp and N64ModernRuntime](https://github.com/N64Recomp): Wiseguy and contributors
+- [RT64](https://github.com/rt64/rt64): Dario and contributors
+- [splat](https://github.com/ethteck/splat)
+- [n64sym](https://github.com/shygoo/n64sym) signatures: shygoo
+- [SDL2](https://www.libsdl.org/)

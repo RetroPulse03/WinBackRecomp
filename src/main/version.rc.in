@@ -1,0 +1,31 @@
+// Windows version resource, configured by CMake from project(VERSION).
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "WinBack Recompiled contributors"
+            VALUE "FileDescription",  "WinBack Recompiled"
+            VALUE "FileVersion",      "@PROJECT_VERSION@@WINBACK_VERSION_SUFFIX@"
+            VALUE "InternalName",     "WinBackRecompiled"
+            VALUE "LegalCopyright",   "GPL-3.0. WinBack is a trademark of its respective owners."
+            VALUE "OriginalFilename", "WinBackRecompiled.exe"
+            VALUE "ProductName",      "WinBack Recompiled"
+            VALUE "ProductVersion",   "@PROJECT_VERSION@@WINBACK_VERSION_SUFFIX@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

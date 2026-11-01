@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(WinBackRecomp LANGUAGES C CXX)
+project(WinBackRecomp VERSION 0.1.0 LANGUAGES C CXX)
+set(WINBACK_VERSION_SUFFIX "" CACHE STRING "Appended to the version, e.g. -dev")
 
 # WinBack: Covert Operations (USA) - static recompilation for PC.
 #
@@ -116,6 +117,11 @@ target_include_directories(WinBackRecompiled PRIVATE
     ${CMAKE_BINARY_DIR}/rt64/src
 )
 target_link_libraries(WinBackRecompiled PRIVATE WinBackGame rt64)
+target_compile_definitions(WinBackRecompiled PRIVATE
+    WINBACK_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    WINBACK_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    WINBACK_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+    WINBACK_VERSION_SUFFIX="${WINBACK_VERSION_SUFFIX}")
 
 if (WIN32)
     target_include_directories(WinBackRecompiled PRIVATE ${sdl2_SOURCE_DIR}/include)
@@ -127,8 +133,15 @@ if (WIN32)
             "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxil.dll"
             "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxcompiler.dll"
             $<TARGET_FILE_DIR:WinBackRecompiled>)
-    # Console subsystem during bring-up so logs are visible.
-    set_target_properties(WinBackRecompiled PROPERTIES WIN32_EXECUTABLE FALSE)
+    # Version info resource. Release builds use the GUI subsystem (no console
+    # window); WINBACK_CONSOLE=ON keeps the console for debugging.
+    configure_file(src/main/version.rc.in ${CMAKE_BINARY_DIR}/version.rc @ONLY)
+    target_sources(WinBackRecompiled PRIVATE ${CMAKE_BINARY_DIR}/version.rc)
+    option(WINBACK_CONSOLE "Build with a console window" OFF)
+    if (NOT WINBACK_CONSOLE)
+        set_target_properties(WinBackRecompiled PROPERTIES WIN32_EXECUTABLE TRUE)
+        target_link_options(WinBackRecompiled PRIVATE /ENTRY:mainCRTStartup)
+    endif()
 else()
     find_package(SDL2 REQUIRED)
     find_package(Threads REQUIRED)

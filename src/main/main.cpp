@@ -6,6 +6,7 @@
 // Options: --rom <path>   ROM to use (only needed once; it is stored)
 //          --fullscreen
 //          --developer    RT64 debug UI
+//          --console      show log output (also on when WINBACK_DEBUG is set)
 
 #include <cstdio>
 #include <cstdlib>
@@ -38,7 +39,8 @@ namespace {
 
 constexpr const char* app_title = "WinBack Recompiled";
 constexpr const char* app_folder = "WinBackRecompiled";
-const recomp::Version project_version{0, 1, 0, "-dev"};
+const recomp::Version project_version{
+    WINBACK_VERSION_MAJOR, WINBACK_VERSION_MINOR, WINBACK_VERSION_PATCH, WINBACK_VERSION_SUFFIX};
 
 SDL_Window* window = nullptr;
 bool fullscreen = false;
@@ -180,9 +182,27 @@ void set_default_graphics_config() {
     R::set_graphics_config(cfg);
 }
 
+#ifdef _WIN32
+// Release builds use the GUI subsystem. Attach to the launching terminal, or
+// open a new console, so logs and crash messages stay visible when asked for.
+// Output already redirected to a file or pipe is left alone.
+void open_console() {
+    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (GetConsoleWindow() != nullptr || (out != nullptr && out != INVALID_HANDLE_VALUE)) {
+        return;
+    }
+    if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+        AllocConsole();
+    }
+    std::freopen("CONOUT$", "w", stdout);
+    std::freopen("CONOUT$", "w", stderr);
+}
+#endif
+
 } // namespace
 
 int main(int argc, char** argv) {
+    bool console = std::getenv("WINBACK_DEBUG") != nullptr;
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
             rom_arg = argv[++i];
@@ -193,9 +213,15 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--developer") == 0) {
             developer = true;
         }
+        else if (std::strcmp(argv[i], "--console") == 0) {
+            console = true;
+        }
     }
 
 #ifdef _WIN32
+    if (console) {
+        open_console();
+    }
     timeBeginPeriod(1);
 #endif
 

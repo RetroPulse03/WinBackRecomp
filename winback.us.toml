@@ -8,8 +8,9 @@ symbols_file_path = "winback.us.syms.toml"
 rom_file_path = "baserom.us.z64"
 output_func_path = "RecompiledFuncs"
 functions_per_output_file = 200
-# Debug: calls TRACE_ENTRY() (src/game/trace.h) at every function entry.
-trace_mode = true
+# Debug only: calls TRACE_ENTRY() (src/game/trace.h) at every function entry so
+# WINBACK_DEBUG can print each thread's recent calls. Costs performance; off in releases.
+trace_mode = false
 
 [patches]
 # Functions that touch hardware the runtime emulates at a higher level.
