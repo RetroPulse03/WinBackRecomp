@@ -11,7 +11,7 @@ Static recompilation of *WinBack: Covert Operations* (N64, USA) to a native Wind
 ## Current state (2026-11-01)
 
 - Boots through the intros, title screen and Controller Pak save into the first mission at 60 fps. Only scripted runs of 45 seconds or less have been tested.
-- Public repo: https://github.com/RetroPulse03/WinBackRecomp (branch `main`). `gh` is installed at `C:Program FilesGitHub CLIgh.exe` and logged in. Commit only as RetroPulse with the noreply email already set in .git/config.
+- Public repo: https://github.com/RetroPulse03/WinBackRecomp (branch `main`). `gh` is installed at `C:/Program Files/GitHub CLI/gh.exe` and logged in. Commit only as RetroPulse with the noreply email already set in .git/config.
 - The working tree is ready to regenerate and build (`baserom.us.z64` is in the root, and the `deps/` and `build/` trees are already built).
 
 ## Everyday commands (from the repo root)
