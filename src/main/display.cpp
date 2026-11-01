@@ -122,7 +122,9 @@ void load(bool developer, bool force_fullscreen) {
     // Vulkan on every platform (RT64's Auto picks D3D12 on Windows). D3D12 stays
     // available through WINBACK_GFX_API=d3d12.
     cfg.api_option = R::GraphicsApi::Vulkan;
-    cfg.rr_option = R::RefreshRate::Display;
+    // No frame interpolation: RT64 treats every task as a frame, and WinBack draws each frame with two tasks
+    // (the scene, then the laser sight), so interpolated frames don't match the game's frames.
+    cfg.rr_option = R::RefreshRate::Original;
     cfg.hpfb_option = R::HighPrecisionFramebuffer::Auto;
     cfg.rr_manual_value = 60;
     cfg.ds_option = 1;

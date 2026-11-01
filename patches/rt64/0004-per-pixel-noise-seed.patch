@@ -1,0 +1,30 @@
+diff --git a/src/shaders/PostBlendDitherNoisePS.hlsl b/src/shaders/PostBlendDitherNoisePS.hlsl
+index 0efa3d5..0225fba 100644
+--- a/src/shaders/PostBlendDitherNoisePS.hlsl
++++ b/src/shaders/PostBlendDitherNoisePS.hlsl
+@@ -18,7 +18,7 @@ void PSMain(
+ )
+ {
+     int2 pixelPosSeed = floor(vertexPosition.xy);
+-    uint randomSeed = initRand(FrParams.frameCount, gConstants.renderIndex * (pixelPosSeed.y * 65536 + pixelPosSeed.x), 16);
++    uint randomSeed = initRand(FrParams.frameCount, uint(pixelPosSeed.y * 65536 + pixelPosSeed.x) ^ (gConstants.renderIndex * 0x9E3779B9u), 16);
+     const float Range = (7.0f * FrParams.ditherNoiseStrength) / 255.0f;
+     resultColor.r = nextRand(randomSeed) * Range;
+     resultColor.g = nextRand(randomSeed) * Range;
+diff --git a/src/shaders/RasterPS.hlsl b/src/shaders/RasterPS.hlsl
+index f5beee9..82a928a 100644
+--- a/src/shaders/RasterPS.hlsl
++++ b/src/shaders/RasterPS.hlsl
+@@ -61,8 +61,11 @@ LIBRARY_EXPORT bool RasterPS(const RenderParams rp, float4 vertexPosition, float
+     const bool depthClampNear = renderFlagNoN(rp.flags);
+     const bool depthDecal = (otherMode.zMode() == ZMODE_DEC);
+     const bool zSourcePrim = (otherMode.zSource() == G_ZS_PRIM);
++    // Each pixel gets its own noise, like the RDP's. Multiplying the position by the instance index gave every
++    // pixel of the first draw call in a workload (and of row 0 and column 0) the same value, so a dithered alpha
++    // compare kept or dropped such a draw as a whole each frame.
+     int2 pixelPosSeed = floor(vertexPosition.xy);
+-    uint randomSeed = initRand(FrParams.frameCount, instanceIndex * pixelPosSeed.y * pixelPosSeed.x, 16); // TODO: Review seed.
++    uint randomSeed = initRand(FrParams.frameCount, uint(pixelPosSeed.y * 65536 + pixelPosSeed.x) ^ (instanceIndex * 0x9E3779B9u), 16);
+ 
+     // Handle no-nearclipping by clamping the minimum depth and manually clipping above the maximum.
+     if (depthClampNear) {
