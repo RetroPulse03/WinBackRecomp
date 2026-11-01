@@ -1,3 +1,9 @@
+# Author's Notes:
+I decided to take on this for 2 reasons. #1.) WinBack is one of the greatest games on the N64, and an astonishingly unloved hidden gem that deserves some spotlight. I love this game. #2.) I've been doing a lot of 'hands-on' work with Claude Code in my other projects, and I thought it would be fun to see how it would work if I flipped the script, and let it mostly do this by itself with only minimal interjection from myself. 
+
+If you love this game, and you don't like AI, then this isn't for you. However, I didn't see anyone else recomping this game, so please if you have the time and the talent, I ask that in all seriousness you make a better project. I'll step aside and take this down to make as much room as possible for a well thought out, human-first approach. 
+
+
 # WinBack Recompiled
 
 A native PC port of **WinBack: Covert Operations** (N64, USA), made by static recompilation. The game's MIPS code is translated to C and compiled for x64 using [N64Recomp](https://github.com/N64Recomp/N64Recomp), and [RT64](https://github.com/rt64/rt64) renders it. There is no emulator.
