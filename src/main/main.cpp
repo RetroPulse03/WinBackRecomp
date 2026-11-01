@@ -168,7 +168,9 @@ void set_default_graphics_config() {
     cfg.res_option = R::Resolution::Auto;
     cfg.wm_option = fullscreen ? R::WindowMode::Fullscreen : R::WindowMode::Windowed;
     cfg.hr_option = R::HUDRatioMode::Clamp16x9;
-    cfg.api_option = R::GraphicsApi::Auto;
+    // Vulkan on every platform (RT64's Auto picks D3D12 on Windows). D3D12 stays
+    // available through WINBACK_GFX_API=d3d12.
+    cfg.api_option = R::GraphicsApi::Vulkan;
     cfg.ar_option = R::AspectRatio::Expand;
     cfg.msaa_option = R::Antialiasing::MSAA2X;
     cfg.rr_option = R::RefreshRate::Display;
