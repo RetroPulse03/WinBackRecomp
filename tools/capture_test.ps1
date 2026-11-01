@@ -1,5 +1,6 @@
 # Runs the game for a while and saves screenshots of its window.
 # Usage: powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 [-Seconds 30] [-Shots 3] [-Out captures]
+# Set WINBACK_AUTOPRESS (see src/main/input.cpp) for scripted input.
 param(
     [int]$Seconds = 30,
     [int]$Shots = 3,

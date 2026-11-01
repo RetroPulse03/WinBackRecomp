@@ -5,8 +5,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include "sdl_include.hpp"
 #include "input.hpp"
@@ -97,6 +102,63 @@ PadState read_keyboard() {
     return s;
 }
 
+// WINBACK_AUTOPRESS=button@seconds[,button@seconds...]: scripted player 1
+// presses for unattended tests, e.g. "start@10,a@13,a@15". Each press is held
+// for 150 ms. Buttons: a b z start l r du dd dl dr cu cd cl cr.
+struct AutoPress {
+    uint16_t mask;
+    double at;
+};
+
+std::vector<AutoPress> load_autopress() {
+    std::vector<AutoPress> out;
+    const char* env = std::getenv("WINBACK_AUTOPRESS");
+    if (env == nullptr) {
+        return out;
+    }
+    static const std::pair<const char*, uint16_t> names[] = {
+        {"a", BTN_A}, {"b", BTN_B}, {"z", BTN_Z}, {"start", BTN_START}, {"l", BTN_L}, {"r", BTN_R},
+        {"du", BTN_DU}, {"dd", BTN_DD}, {"dl", BTN_DL}, {"dr", BTN_DR},
+        {"cu", BTN_CU}, {"cd", BTN_CD}, {"cl", BTN_CL}, {"cr", BTN_CR},
+    };
+    std::string spec = env;
+    size_t pos = 0;
+    while (pos < spec.size()) {
+        size_t comma = spec.find(',', pos);
+        std::string item = spec.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        size_t at = item.find('@');
+        if (at != std::string::npos) {
+            std::string name = item.substr(0, at);
+            for (const auto& [n, mask] : names) {
+                if (name == n) {
+                    out.push_back({mask, std::atof(item.c_str() + at + 1)});
+                }
+            }
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        pos = comma + 1;
+    }
+    return out;
+}
+
+uint16_t autopress_buttons() {
+    static const std::vector<AutoPress> presses = load_autopress();
+    static const auto start = std::chrono::steady_clock::now();
+    if (presses.empty()) {
+        return 0;
+    }
+    double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    uint16_t buttons = 0;
+    for (const AutoPress& p : presses) {
+        if (t >= p.at && t < p.at + 0.15) {
+            buttons |= p.mask;
+        }
+    }
+    return buttons;
+}
+
 } // namespace
 
 void winback::input::handle_event(const SDL_Event& ev) {
@@ -125,6 +187,7 @@ void winback::input::handle_event(const SDL_Event& ev) {
 void winback::input::poll() {
     std::array<PadState, max_players> next{};
     next[0] = read_keyboard();
+    next[0].buttons |= autopress_buttons();
     for (int i = 0; i < max_players; i++) {
         if (controllers[i] == nullptr) {
             continue;
