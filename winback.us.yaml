@@ -1,0 +1,47 @@
+name: WinBack - Covert Operations (USA)
+sha1: fa04477b321a95e1f7a2edcac5c09bfa6ef72041
+options:
+  basename: winback
+  target_path: baserom.us.z64
+  base_path: .
+  platform: n64
+  compiler: IDO
+  find_file_boundaries: True
+  header_encoding: ASCII
+  asm_path: asm
+  src_path: src_decomp
+  build_path: build_decomp
+  ld_script_path: winback.us.ld
+  symbol_addrs_path:
+    - symbol_addrs.txt
+    - symbol_addrs.libultra.txt
+  undefined_funcs_auto_path: build_decomp/undefined_funcs_auto.txt
+  undefined_syms_auto_path: build_decomp/undefined_syms_auto.txt
+  asm_inc_header: ""
+  create_undefined_funcs_auto: False
+  create_undefined_syms_auto: False
+  disasm_unknown: True
+  ld_bss_is_noload: True
+segments:
+  - name: header
+    type: header
+    start: 0x0
+  - name: ipl3
+    type: bin
+    start: 0x40
+  # Entry clears BSS 0x8011D3B0..0x801DB700 and jumps to 0x800E3C90.
+  # The whole game is one statically linked segment: no code overlays.
+  - name: main
+    type: code
+    start: 0x1000
+    vram: 0x80025C00
+    bss_size: 0xBE350
+    subsegments:
+      - [0x1000, asm]
+      # rspboot, F3DEX2/L3DEX2 2.08 and audio microcode text, then data.
+      - [0xD9E60, bin, rsp_and_data]
+      - { start: 0xF87B0, type: bss, vram: 0x8011D3B0 }
+  - name: assets
+    type: bin
+    start: 0xF87B0
+  - [0x1000000]

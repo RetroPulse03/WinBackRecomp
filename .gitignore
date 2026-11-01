@@ -1,0 +1,21 @@
+# Game data: never commit the ROM or anything generated from it.
+*.z64
+*.n64
+*.v64
+rom/
+asm/
+assets/
+RecompiledFuncs/
+rsp/
+winback.us.ld
+winback.us.syms.toml
+symbol_addrs.libultra*.txt
+build_decomp/
+src_decomp/
+
+# Tools, dependencies and build output
+.venv/
+deps/
+build/
+*.log
+setup_status.txt
