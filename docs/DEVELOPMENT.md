@@ -108,6 +108,7 @@ Changes to dependencies live in `patches/<dep>/*.patch`. `tools/fetch_deps.sh` a
 |---|---|
 | `rt64/0001-f3dex2-stateful-texrect.patch` | In F3DEX2, `G_TEXRECT` only stores its words and `G_RDPHALF_2` issues the rectangle. WinBack writes a 16-byte texrect before the sky cloud plane to load TMEM. RT64 drew it (a grey square) and consumed the following `G_MTX`, so no clouds were drawn. |
 | `rt64/0002-l3dex2-line3d.patch` | The laser sight uses L3DEX2 2.08 `G_LINE3D`, which RT64 left unimplemented. The line is drawn as a screen-space quad built the same way as the microcode's RDP primitive (handler at IMEM `0x1618`). Its width is `(w0 & 0xFF) + 3` quarter-pixels on each side: horizontal for steep lines, vertical with square ends for shallow ones. Lines ignore culling, and L3DEX2 TRI1/TRI2 draw wireframes. |
+| `rt64/0003-msaa-change-deadlock.patch` | Changing anti-aliasing or the resolution makes the workload thread wait until the present thread has shown the previous frame's interpolated frames, before it destroys their targets. With MSAA, frames can be left unshown (for example when two workloads share one present), and the present thread then waits on the workload thread: rendering stopped for good. The workload thread now also stops waiting once the present thread has moved on to the current workload's present. It waits without holding the configuration lock, which the present thread needs. |
 
 ## Recomp menu
 
@@ -122,7 +123,7 @@ Changes to dependencies live in `patches/<dep>/*.patch`. `tools/fetch_deps.sh` a
 
 `src/main/display.cpp` keeps the window mode, resolution, aspect ratio and anti-aliasing, saves them to `settings.json` and applies them live. The renderer options go through ultramodern's graphics config (`update_config` in `rt64_context.cpp`). The window mode is applied with SDL on the window thread: `SDL_WINDOW_FULLSCREEN_DESKTOP` for Borderless, and `SDL_WINDOW_FULLSCREEN` at the desktop display mode for Fullscreen. ultramodern's `wm_option` stays Windowed, because RT64's own full-screen mode is a borderless window that would fight SDL. `--fullscreen` and Big Picture mode start borderless without changing the saved setting.
 
-In one of five scripted runs, rendering stopped (the game thread kept running) when the resolution was changed half a second after leaving Fullscreen for Windowed, and the game then couldn't shut down. It didn't happen again in four repeats. If it is seen again, capture thread stacks with lldb while it is stuck.
+Changing anti-aliasing during gameplay could stop rendering for good (RT64 deadlock, fixed by `rt64/0003-msaa-change-deadlock.patch`). A rendering stop seen once after a resolution change went through the same wait and was probably the same bug. To diagnose a stuck renderer, attach lldb (`lldb --batch -p <pid> -o "bt all"`) and look at the `RT64 Present` and workload threads.
 
 ## Level Select
 

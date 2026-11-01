@@ -1,0 +1,129 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+index 8579695..6451c9d 100644
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -513,6 +513,12 @@ namespace RT64 {
+                 skipPresent = skipPresent || ext.swapChain->isEmpty();
+ 
+                 Present &present = presents[processCursor];
++                {
++                    std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
++                    ext.sharedResources->presentWorkloadId = present.workloadId;
++                }
++
++                ext.sharedResources->interpolatedCondition.notify_all();
+                 ext.workloadQueue->waitForWorkloadId(present.workloadId);
+ 
+                 if (!presentThreadRunning) {
+diff --git a/src/hle/rt64_shared_queue_resources.h b/src/hle/rt64_shared_queue_resources.h
+index 8858dac..920a3b2 100644
+--- a/src/hle/rt64_shared_queue_resources.h
++++ b/src/hle/rt64_shared_queue_resources.h
+@@ -54,6 +54,9 @@ namespace RT64 {
+         std::vector<std::unique_ptr<RenderTarget>> interpolatedColorTargets;
+         InterpolatedFrameCounters interpolatedFrames[2];
+         uint32_t interpolatedFramesIndex = 0;
++        // Workload the present queue's current present is waiting for or presenting. Presents of earlier workloads are
++        // finished, so their interpolated frames will never be presented. Guarded by interpolatedMutex.
++        uint64_t presentWorkloadId = 0;
+         std::mutex interpolatedMutex;
+         std::condition_variable interpolatedCondition;
+         std::mutex workloadMutex;
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 5b0b726..1eee157 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -121,8 +121,33 @@ namespace RT64 {
+         framebufferRenderer->updateMultisampling();
+     }
+ 
+-    void WorkloadQueue::threadConfigurationUpdate(WorkloadConfiguration &workloadConfig) {
+-        const std::scoped_lock lock(ext.sharedResources->configurationMutex);
++    // Whether the present queue has moved on to the current workload's present (or a later one), which can't proceed until
++    // this workload is processed. Interpolated frames left unpresented by earlier presents will never be presented, so waiting
++    // for them would deadlock. Must be called with interpolatedMutex held.
++    bool WorkloadQueue::presentQueueWaitsFor(uint64_t currentWorkloadId) const {
++        return ext.sharedResources->presentWorkloadId >= currentWorkloadId;
++    }
++
++    void WorkloadQueue::threadConfigurationUpdate(WorkloadConfiguration &workloadConfig, uint64_t currentWorkloadId) {
++        std::unique_lock<std::mutex> lock(ext.sharedResources->configurationMutex);
++
++        // Wait until the present queue has stopped using the interpolated color targets before they're destroyed. The
++        // configuration lock is released meanwhile, as the present queue needs it to present those frames.
++        bool presentsFinished = false;
++        while (!presentsFinished && (ext.sharedResources->fbConfigChanged || ext.sharedResources->swapChainSizeChanged)) {
++            lock.unlock();
++            {
++                std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
++                InterpolatedFrameCounters &curFrameCounters = ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
++                ext.sharedResources->interpolatedCondition.wait(interpolatedLock, [&]() {
++                    return (curFrameCounters.presented >= curFrameCounters.available) || presentQueueWaitsFor(currentWorkloadId);
++                });
++            }
++
++            presentsFinished = true;
++            lock.lock();
++        }
++
+         const bool sizeChanged = ext.sharedResources->swapChainSizeChanged;
+         ext.sharedResources->swapChainSizeChanged = false;
+ 
+@@ -251,15 +276,7 @@ namespace RT64 {
+         workloadConfig.postBlendNoiseNegative = ext.sharedResources->emulatorConfig.dither.postBlendNoiseNegative;
+         
+         if (ext.sharedResources->fbConfigChanged || sizeChanged) {
+-            {
+-                // Wait until the other queue has stopped using the interpolated color targets.
+-                std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
+-                InterpolatedFrameCounters &curFrameCounters = ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
+-                ext.sharedResources->interpolatedCondition.wait(interpolatedLock, [&]() {
+-                    return curFrameCounters.presented >= curFrameCounters.available;
+-                });
+-            }
+-
++            // The present queue has stopped using the interpolated color targets (see the start of this function).
+             std::scoped_lock<std::mutex> managerLock(ext.sharedResources->managerMutex);
+             FramebufferManager &fbManager = ext.sharedResources->framebufferManager;
+             RenderTargetManager &targetManager = ext.sharedResources->renderTargetManager;
+@@ -883,7 +900,7 @@ namespace RT64 {
+ 
+                 ElapsedTimer workloadTimer;
+                 workloadProfiler.start();
+-                threadConfigurationUpdate(workloadConfig);
++                threadConfigurationUpdate(workloadConfig, workload.workloadId);
+ 
+                 // FIXME: This is a very hacky way to find out if we need to advance the frame if the workload was paused for the first time.
+                 if (!workload.paused || (!gameFrames[curFrameIndex].workloads.empty() && (gameFrames[curFrameIndex].workloads[0] != (uint32_t)processCursor))) {
+@@ -1002,7 +1019,7 @@ namespace RT64 {
+                 else if (generateInterpolatedFrames) {
+                     std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
+                     ext.sharedResources->interpolatedCondition.wait(interpolatedLock, [&]() {
+-                        return (prevFrameCounters.presented == 0) || (prevFrameCounters.presented >= prevFrameCounters.available);
++                        return (prevFrameCounters.presented == 0) || (prevFrameCounters.presented >= prevFrameCounters.available) || presentQueueWaitsFor(workload.workloadId);
+                     });
+                 }
+ 
+@@ -1064,7 +1081,7 @@ namespace RT64 {
+                                 std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
+                                 ext.sharedResources->interpolatedCondition.wait(interpolatedLock, [&]() {
+                                     frameReduction = frameReduction || (prevFrameCounters.presented <= targetIndex);
+-                                    return prevFrameCounters.presented > targetIndex;
++                                    return (prevFrameCounters.presented > targetIndex) || presentQueueWaitsFor(workload.workloadId);
+                                 });
+                             }
+ 
+diff --git a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
+index e9d7a02..43f43a9 100644
+--- a/src/hle/rt64_workload_queue.h
++++ b/src/hle/rt64_workload_queue.h
+@@ -108,7 +108,8 @@ namespace RT64 {
+         void waitForWorkloadId(uint64_t waitId);
+         void setup(const External &ext);
+         void updateMultisampling();
+-        void threadConfigurationUpdate(WorkloadConfiguration &workloadConfig);
++        bool presentQueueWaitsFor(uint64_t currentWorkloadId) const;
++        void threadConfigurationUpdate(WorkloadConfiguration &workloadConfig, uint64_t currentWorkloadId);
+         void threadConfigurationValidate();
+         void threadRenderFrame(GameFrame &curFrame, const GameFrame &prevFrame, const WorkloadConfiguration &workloadConfig,
+             const DebuggerRenderer &debuggerRenderer, const DebuggerCamera &debuggerCamera, float curFrameWeight, float prevFrameWeight,
