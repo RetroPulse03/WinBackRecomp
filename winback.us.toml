@@ -38,18 +38,6 @@ func = "func_800E8B28"
 before_vram = 0x800E8B90
 text = "{ extern uint32_t winback_ai_get_status(void); ctx->r2 = winback_ai_get_status(); }"
 
-# --- Rendering -------------------------------------------------------------
-
-# Drifting cloud-shadow overlay (func_800C4FB0): a 64x64 I4 noise texrect in
-# grey (white on level type 0x1D) whose alpha is the texel. It never sets a
-# render mode and inherits the scene's AA_ZB_OPA_SURF2, where hardware turns
-# the low alpha into partial coverage; RT64 draws it as a solid grey square.
-# Emit G_SETOTHERMODE_L with G_RM_PASS, G_RM_XLU_SURF2 before it.
-[[patches.hook]]
-func = "func_800C4FB0"
-before_vram = 0x800C50EC
-text = "{ gpr dl = MEM_W(0, (gpr)(int32_t)0x801D2C80); MEM_W(0, dl) = 0xE200001C; MEM_W(4, dl) = 0x0C184A40; MEM_W(0, (gpr)(int32_t)0x801D2C80) = (int32_t)(dl + 8); }"
-
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.

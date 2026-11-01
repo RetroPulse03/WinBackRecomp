@@ -1,6 +1,6 @@
 #!/bin/sh
-# Clones the pinned dependencies into deps/ (skips ones already there) and
-# downloads the SDL2 Windows dev zip. Then build N64Recomp:
+# Clones the pinned dependencies into deps/ (skips ones already there), applies
+# patches/<dep>/*.patch to fresh clones, and downloads the SDL2 Windows dev zip. Then build N64Recomp:
 #   tools\vsenv.cmd cmake -S deps/N64Recomp -B deps/N64Recomp/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 #   tools\vsenv.cmd cmake --build deps/N64Recomp/build
 set -e
@@ -12,6 +12,9 @@ clone() { # dir url commit
         git clone "$2" "deps/$1"
         git -C "deps/$1" checkout "$3"
         git -C "deps/$1" submodule update --init --recursive
+        for p in patches/"$1"/*.patch; do
+            [ -f "$p" ] && git -C "deps/$1" apply "$PWD/$p"
+        done
     fi
 }
 

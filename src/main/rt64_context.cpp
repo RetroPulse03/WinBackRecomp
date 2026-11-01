@@ -41,7 +41,8 @@ void check_interrupts_stub() {}
 
 // WINBACK_DLDUMP: logs every fill/texture rectangle of at least 32x32 pixels
 // with the RDP state it is drawn with, for chasing render bugs. Walks the
-// F3DEX2 display list itself; RT64 is unaffected.
+// F3DEX2 display list itself; RT64 is unaffected. As in the microcode, a
+// texture rectangle is sent when G_RDPHALF_2 runs, not at G_TEXRECT.
 void dump_rects(const uint8_t* rdram, uint32_t dl) {
     static const bool enabled = std::getenv("WINBACK_DLDUMP") != nullptr;
     static uint32_t frame = 0;
@@ -55,6 +56,15 @@ void dump_rects(const uint8_t* rdram, uint32_t dl) {
     uint32_t stack[18];
     int depth = 0;
     uint32_t combine0 = 0, combine1 = 0, omh = 0, oml = 0, timg0 = 0, timg1 = 0, prim = 0, env = 0, fill = 0;
+    uint32_t texrect0 = 0, texrect1 = 0;
+    auto log_rect = [&](const char* kind, uint32_t w0, uint32_t w1) {
+        uint32_t x1 = (w0 >> 12) & 0xFFF, y1 = w0 & 0xFFF;
+        uint32_t x0 = (w1 >> 12) & 0xFFF, y0 = w1 & 0xFFF;
+        if (x1 >= x0 + 32 * 4 && y1 >= y0 + 32 * 4) {
+            std::fprintf(stderr, "[dl %u] %s (%u,%u)-(%u,%u) cc %08X %08X om %08X %08X timg %08X %08X prim %08X env %08X fill %08X\n",
+                frame, kind, x0 / 4, y0 / 4, x1 / 4, y1 / 4, combine0, combine1, omh, oml, timg0, timg1, prim, env, fill);
+        }
+    };
     for (int guard = 0; guard < 200000; guard++) {
         uint32_t w0 = word(dl), w1 = word(dl + 4);
         uint8_t op = w0 >> 24;
@@ -91,31 +101,13 @@ void dump_rects(const uint8_t* rdram, uint32_t dl) {
             case 0xFA: prim = w1; break;
             case 0xFB: env = w1; break;
             case 0xF7: fill = w1; break;
-            case 0xF5: case 0xF3: case 0xF2: case 0xF4: case 0xF0: // tile setup, loads
-                if (std::getenv("WINBACK_DLDUMP_TILES") != nullptr && prim == 0x404040FF) {
-                    std::fprintf(stderr, "[dl %u]   %02X %08X %08X\n", frame, op, w0, w1);
+            case 0xE4: case 0xE5: texrect0 = w0; texrect1 = w1; break; // G_TEXRECT / G_TEXRECTFLIP
+            case 0xF1: // G_RDPHALF_2
+                if ((texrect0 >> 24) == 0xE4 || (texrect0 >> 24) == 0xE5) {
+                    log_rect((texrect0 >> 24) == 0xE4 ? "TEXRECT" : "TEXRECTFLIP", texrect0, texrect1);
                 }
                 break;
-            case 0xE4: case 0xF6: { // G_TEXRECT / G_FILLRECT
-                uint32_t x1 = (w0 >> 12) & 0xFFF, y1 = w0 & 0xFFF;
-                uint32_t x0 = (w1 >> 12) & 0xFFF, y0 = w1 & 0xFFF;
-                if (op == 0xE4) {
-                    dl += 16; // G_RDPHALF_1 + G_RDPHALF_2
-                }
-                if (x1 - x0 >= 32 * 4 && y1 - y0 >= 32 * 4) {
-                    std::fprintf(stderr, "[dl %u] %s (%u,%u)-(%u,%u) cc %08X %08X om %08X %08X timg %08X %08X prim %08X env %08X fill %08X\n",
-                        frame, op == 0xE4 ? "TEXRECT" : "FILLRECT", x0 / 4, y0 / 4, x1 / 4, y1 / 4,
-                        combine0, combine1, omh, oml, timg0, timg1, prim, env, fill);
-                    static bool dumped = false;
-                    if (!dumped && std::getenv("WINBACK_DLDUMP_TILES") != nullptr && prim == 0x404040FF) {
-                        dumped = true;
-                        for (uint32_t i = 0; i < 0x800; i += 4) {
-                            std::fprintf(stderr, "%08X%s", word(timg1 + i), (i & 0x1F) == 0x1C ? "\n" : " ");
-                        }
-                    }
-                }
-                break;
-            }
+            case 0xF6: log_rect("FILLRECT", w0, w1); break;
         }
     }
 }

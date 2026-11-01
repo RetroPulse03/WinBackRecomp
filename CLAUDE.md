@@ -26,7 +26,7 @@ powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Sho
 - Fresh machine: run `sh tools/fetch_deps.sh`, build N64Recomp (the commands are in that script's header), then follow README.md "Building".
 - Scripted input for unattended runs: `WINBACK_AUTOPRESS=start@6,a@10,...`. The sequence used to reach the first mission (with the pause menu at the end) was `start@6,start@9,start@12,a@14,a@16,start@18,a@20,a@23,a@26,start@30,a@33,a@36`.
 - `WINBACK_WATCH=8011xxxx,...` adds memory words to the debug dump that prints every 5 seconds.
-- `WINBACK_DLDUMP=1` logs every fill/texture rect of 32x32 or more with its combiner, other modes and texture (stderr). It found the cloud-shadow overlay; extend `dump_rects` in `src/main/rt64_context.cpp` for other render bugs.
+- `WINBACK_DLDUMP=1` logs every fill/texture rect of 32x32 or more with its combiner, other modes and texture (stderr). Extend `dump_rects` in `src/main/rt64_context.cpp` for other render bugs.
 - Test runs that `Stop-Process` the game look like crashes to the user; say so before launching one.
 - Re-run `regen.sh` after changing `symbol_addrs.txt`, `winback.us.toml`, `winback.us.yaml` or the generators. Then rebuild; CMake globs RecompiledFuncs, so re-configure if the file count changes.
 
@@ -42,6 +42,8 @@ powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Sho
   - It also extends functions whose jump table cases fall in a tail splat split off. The symptom of a missed one is a "Switch-case out of bounds" abort.
   - A hook's `before_vram` must be inside a function that exists in the syms file, not at a label.
 - **Audio microcode.** The audio ucode the game uses is ROM 0xDAD50, size 0xC60 (`aspMain.us.toml`). The one at 0xD9F30 is unused. Missing indirect jump targets go in `extra_indirect_branch_targets`.
+- **Render bugs: fix the emulation, never the game.** Check what the real microcode/RDP does (F3DEX2 disassembly: github.com/Mr-Wiseguy/f3dex2; RDP: parallel-rdp) and compare against a ParaLLEl-RDP capture. Changes to dependencies live in `patches/<dep>/*.patch`, applied by `fetch_deps.sh` on clone; keep `deps/` in sync with them.
+  - `patches/rt64/0001-f3dex2-stateful-texrect.patch`: in F3DEX2, `G_TEXRECT` only stores its words and `G_RDPHALF_2` sends the rectangle. WinBack writes a 16-byte RDP-form texrect before the sky cloud plane to load its TMEM; RT64 used to draw it (the grey square) and swallow the following `G_MTX` (no clouds). Worth upstreaming to rt64.
 - **Saves.** The Controller Pak is ours (`src/game/controller_pak.cpp`), stored in `%APPDATA%\WinBackRecompiled\saves\`. librecomp's `pak.cpp` is removed from the build in CMakeLists.txt.
 
 ## Toolchain quirks on this machine
