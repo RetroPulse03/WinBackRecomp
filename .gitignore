@@ -4,6 +4,7 @@
 *.v64
 rom/
 generated/
+game/
 
 # Tools, dependencies and build output
 .venv/

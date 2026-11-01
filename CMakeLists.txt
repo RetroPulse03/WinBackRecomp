@@ -133,6 +133,17 @@ if (WIN32)
             "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxil.dll"
             "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxcompiler.dll"
             $<TARGET_FILE_DIR:WinBackRecompiled>)
+    # game/ is the folder to play from: every build refreshes the exe, its
+    # symbols and DLLs there, and the game keeps its saves and data beside them.
+    add_custom_command(TARGET WinBackRecompiled POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/game"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:WinBackRecompiled>
+            $<TARGET_PDB_FILE:WinBackRecompiled>
+            "${sdl2_SOURCE_DIR}/lib/x64/SDL2.dll"
+            "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxil.dll"
+            "${DEPS}/rt64/src/contrib/dxc/bin/x64/dxcompiler.dll"
+            "${CMAKE_SOURCE_DIR}/game")
     # Version info resource. Release builds use the GUI subsystem (no console
     # window); WINBACK_CONSOLE=ON keeps the console for debugging.
     configure_file(src/main/version.rc.in ${CMAKE_BINARY_DIR}/version.rc @ONLY)

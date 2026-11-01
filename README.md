@@ -67,7 +67,7 @@ tools\vsenv.cmd cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE
 tools\vsenv.cmd cmake --build build
 ```
 
-`tools/regen.sh` generates all game-specific code from your ROM into `generated/`. The game is built as `build/WinBackRecompiled.exe`, and `tools/package.ps1` packages it into `dist/`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [docs/ROM_MAP.md](docs/ROM_MAP.md) describes the ROM layout.
+`tools/regen.sh` generates all game-specific code from your ROM into `generated/`. Each build copies the game into `game/`: run `game\WinBackRecompiled.exe` to play, and your saves there survive rebuilds. `tools/package.ps1` packages release zips into `dist/`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [docs/ROM_MAP.md](docs/ROM_MAP.md) describes the ROM layout.
 
 ## Project layout
 
@@ -84,7 +84,7 @@ tools\vsenv.cmd cmake --build build
 | `docs/` | Development notes and ROM map |
 | `recomplauncher.json` | Launcher manifest shipped in the release zip |
 
-These folders are created locally and never committed: `rom/` (your ROM), `generated/` (everything produced from the ROM, plus logs and screenshots), `deps/`, `build/` and `dist/` (release zips).
+These folders are created locally and never committed: `game/` (the playable game, with its saves and data), `rom/` (your ROM), `generated/` (everything produced from the ROM, plus logs and screenshots), `deps/`, `build/` (compiler output) and `dist/` (release zips).
 
 ## Pinned versions
 

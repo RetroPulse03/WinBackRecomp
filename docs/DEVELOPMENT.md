@@ -21,11 +21,12 @@ Run these from the repository root.
 ```
 sh tools/regen.sh                         # rom/ -> generated/ (asm, symbols, RecompiledFuncs, rsp)
 tools\vsenv.cmd cmake --build build       # incremental build
-build\WinBackRecompiled.exe --console     # run with log output
+game\WinBackRecompiled.exe --console      # play the latest build, with log output
 powershell -ExecutionPolicy Bypass -File tools\capture_test.ps1 -Seconds 40 -Shots 4
 powershell -ExecutionPolicy Bypass -File tools\package.ps1   # dist/WinBackRecompiled-v<version>-Windows-x64.zip
 ```
 
+- Every build copies the exe, its `.pdb` and DLLs into `game/`, the folder to play and test from. Saves, the stored ROM, `rt64/` and mods live there and survive rebuilds. `tools/capture_test.ps1` runs `build\` instead so scripted runs don't touch those saves.
 - Re-run `regen.sh` after changing anything in `config/` or the generators, then rebuild. Logs go to `generated/logs/`. CMake globs `generated/RecompiledFuncs/`, so re-configure if the number of files changes.
 - `tools\vsenv.cmd` loads the Visual Studio environment and puts LLVM on `PATH`. The toolchain is clang-cl with Ninja.
 - Python tools run from `.venv` (splat64 0.50.1, xxhash, pyyaml) with `python -I`.
