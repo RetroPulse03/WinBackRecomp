@@ -45,7 +45,25 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 | Arrow keys | D-Pad |
 | Enter | Start |
 
-**Controller:** left stick = analog stick, A = A, X = B, B = C-Down, Y = C-Left, LB = L, RB or RT = R, LT = Z, right stick = C buttons, Start = Start. Players 2-4 use additional controllers.
+**Controller** (Classic layout, as in the PlayStation 2 release):
+
+| Control | Action | N64 |
+|---|---|---|
+| Left stick | Move / aim | Analog stick |
+| X | Action, take cover | A |
+| A | Reload | B |
+| B | Change weapon | C-Up |
+| Y | Lock on | C-Down |
+| LB | Crouch | Z |
+| RB | Aim | R |
+| LT / RT, right stick | Turn camera | C-Left / C-Right |
+| Right stick click | Camera behind player | C-Left/C-Right twice |
+| D-pad down | Place / detonate C4 | D-Down |
+| Start | Pause | Start |
+
+In menus and on the pause screen, A confirms and B goes back.
+
+Players 2-4 use additional controllers.
 
 The game is fully portable: everything it writes (the ROM copy, saves, mods and renderer data) stays in its own folder, and nothing goes to AppData or Documents. Saves are on an emulated Controller Pak in `saves/`. To back up or move your game, copy the whole folder.
 

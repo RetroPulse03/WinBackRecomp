@@ -39,6 +39,26 @@ func = "func_800E8B28"
 before_vram = 0x800E8B90
 text = "{ extern uint32_t winback_ai_get_status(void); ctx->r2 = winback_ai_get_status(); }"
 
+# --- Input -----------------------------------------------------------------
+
+# Player camera update. It runs every frame of gameplay and stops in menus and
+# the pause screen, so the input layer uses it to switch the face buttons
+# between the gameplay layout and menu confirm/back.
+[[patches.hook]]
+func = "func_80035970"
+before_vram = 0x80035970
+text = "{ extern void winback_camera_frame(void); winback_camera_frame(); }"
+
+# Right stick click: snap the camera behind the player. The game does this when
+# C-Left/C-Right is pressed twice within 5 frames, by setting flag 0x200 in the
+# camera's flags (camera+0x132) unless it is already set or the player's
+# +0x16EC is 1. Request it the same way, under the same conditions, right after
+# the game's own check ($a2 = camera, $t0 = player, camera+0x18 = controller).
+[[patches.hook]]
+func = "func_80035970"
+before_vram = 0x80035D70
+text = "{ extern int winback_take_rear_snap(int); if (winback_take_rear_snap(MEM_H(0x18, ctx->r6)) && !(MEM_HU(0x132, ctx->r6) & 0x200) && MEM_H(0x16EC, ctx->r8) != 1) { MEM_H(0x132, ctx->r6) = MEM_HU(0x132, ctx->r6) | 0x200; } }"
+
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.

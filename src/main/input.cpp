@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -46,30 +47,56 @@ float axis(SDL_GameController* c, SDL_GameControllerAxis a) {
     return std::clamp((v - std::copysign(deadzone, v)) / (1.0f - deadzone), -1.0f, 1.0f);
 }
 
-PadState read_controller(SDL_GameController* c) {
+// Right stick click snaps the camera behind the player. A press is held here
+// until the game's camera update takes it (hook in config/winback.us.toml).
+std::array<bool, max_players> rear_snap_held{};
+std::array<std::atomic<bool>, max_players> rear_snap_pending{};
+
+// Time of the last frame the game updated the player camera (see the hook on
+// func_80035970 in config/winback.us.toml). Shortly after that stops, the
+// game is in a menu or paused.
+std::atomic<int64_t> last_player_control_ns{0};
+
+bool in_gameplay() {
+    using namespace std::chrono_literals;
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return now - std::chrono::nanoseconds(last_player_control_ns.load(std::memory_order_relaxed)) < 100ms;
+}
+
+// Classic scheme: the PS2 release's default layout. Menus always confirm
+// with A and go back with B.
+PadState read_controller(SDL_GameController* c, int player) {
     PadState s{};
     auto btn = [&](SDL_GameControllerButton b, uint16_t mask) {
         if (SDL_GameControllerGetButton(c, b)) s.buttons |= mask;
     };
-    btn(SDL_CONTROLLER_BUTTON_A, BTN_A);
-    btn(SDL_CONTROLLER_BUTTON_X, BTN_B);
-    btn(SDL_CONTROLLER_BUTTON_B, BTN_CD);
-    btn(SDL_CONTROLLER_BUTTON_Y, BTN_CL);
+    if (in_gameplay()) {
+        btn(SDL_CONTROLLER_BUTTON_X, BTN_A);
+        btn(SDL_CONTROLLER_BUTTON_A, BTN_B);
+        btn(SDL_CONTROLLER_BUTTON_B, BTN_CU);
+    }
+    else {
+        btn(SDL_CONTROLLER_BUTTON_A, BTN_A);
+        btn(SDL_CONTROLLER_BUTTON_B, BTN_B);
+    }
+    btn(SDL_CONTROLLER_BUTTON_Y, BTN_CD);
     btn(SDL_CONTROLLER_BUTTON_START, BTN_START);
-    btn(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, BTN_L);
+    btn(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, BTN_Z);
     btn(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, BTN_R);
     btn(SDL_CONTROLLER_BUTTON_DPAD_UP, BTN_DU);
     btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN, BTN_DD);
     btn(SDL_CONTROLLER_BUTTON_DPAD_LEFT, BTN_DL);
     btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, BTN_DR);
-    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0.5f) s.buttons |= BTN_Z;
-    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0.5f) s.buttons |= BTN_R;
+    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0.5f) s.buttons |= BTN_CL;
+    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0.5f) s.buttons |= BTN_CR;
     float rx = axis(c, SDL_CONTROLLER_AXIS_RIGHTX);
-    float ry = axis(c, SDL_CONTROLLER_AXIS_RIGHTY);
     if (rx > 0.5f) s.buttons |= BTN_CR;
     if (rx < -0.5f) s.buttons |= BTN_CL;
-    if (ry > 0.5f) s.buttons |= BTN_CD;
-    if (ry < -0.5f) s.buttons |= BTN_CU;
+    bool rsc = SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+    if (rsc && !rear_snap_held[player] && in_gameplay()) {
+        rear_snap_pending[player] = true;
+    }
+    rear_snap_held[player] = rsc;
     s.x = axis(c, SDL_CONTROLLER_AXIS_LEFTX);
     s.y = -axis(c, SDL_CONTROLLER_AXIS_LEFTY);
     return s;
@@ -165,6 +192,21 @@ uint16_t autopress_buttons() {
 
 } // namespace
 
+// Called by the game thread at the start of the player camera update.
+extern "C" void winback_camera_frame(void) {
+    last_player_control_ns.store(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(),
+        std::memory_order_relaxed);
+}
+
+// Called by the game thread's camera update; true once per right stick click.
+extern "C" int winback_take_rear_snap(int controller_num) {
+    if (controller_num < 0 || controller_num >= max_players) {
+        return 0;
+    }
+    return rear_snap_pending[controller_num].exchange(false);
+}
+
 void winback::input::handle_event(const SDL_Event& ev) {
     if (ev.type == SDL_CONTROLLERDEVICEADDED) {
         SDL_GameController* c = SDL_GameControllerOpen(ev.cdevice.which);
@@ -196,7 +238,7 @@ void winback::input::poll() {
         if (controllers[i] == nullptr) {
             continue;
         }
-        PadState c = read_controller(controllers[i]);
+        PadState c = read_controller(controllers[i], i);
         next[i].buttons |= c.buttons;
         if (std::fabs(c.x) + std::fabs(c.y) > std::fabs(next[i].x) + std::fabs(next[i].y)) {
             next[i].x = c.x;
