@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(WinBackRecomp VERSION 0.1.0 LANGUAGES C CXX)
+project(WinBackRecomp VERSION 0.2.0 LANGUAGES C CXX)
 set(WINBACK_VERSION_SUFFIX "" CACHE STRING "Appended to the version, e.g. -dev")
 
 # WinBack: Covert Operations (USA) - static recompilation for PC.
