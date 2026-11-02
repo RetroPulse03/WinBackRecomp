@@ -13,3 +13,7 @@ build/
 dist/
 *.log
 CLAUDE.local.md
+
+# Mods are not part of the recomp, only the interface in mods/include is.
+/mods/*
+!/mods/include/

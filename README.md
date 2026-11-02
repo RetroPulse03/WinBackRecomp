@@ -107,7 +107,7 @@ tools\vsenv.cmd cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE
 tools\vsenv.cmd cmake --build build
 ```
 
-`tools/regen.sh` generates all game-specific code from your ROM into `generated/`. Each build copies the game into `game/`: run `game\WinBackRecompiled.exe` to play, and your saves there survive rebuilds. `tools/package.ps1` packages release zips into `dist/`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [docs/ROM_MAP.md](docs/ROM_MAP.md) describes the ROM layout.
+`tools/regen.sh` generates all game-specific code from your ROM into `generated/`. Each build copies the game into `game/`: run `game\WinBackRecompiled.exe` to play, and your saves there survive rebuilds. `tools/package.ps1` packages release zips into `dist/`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) explains the pipeline, debugging options and runtime constraints. [WinBack Data](https://github.com/RetroPulse03/WinBackData) documents how the game works and where its data is.
 
 ## Project layout
 

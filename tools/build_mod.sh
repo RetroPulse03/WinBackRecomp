@@ -2,7 +2,7 @@
 # Builds a mod from mods/<name> into the folder generated/mods/<name>, ready to
 # copy into game/mods. Needs LLVM 18.1.8 in deps/llvm-18 (or LLVM_BIN set to a
 # clang and ld.lld with a MIPS target) and regen.sh's symbol file.
-# Usage: sh tools/build_mod.sh mods/test-mod
+# Usage: sh tools/build_mod.sh mods/<name>
 set -e
 cd "$(dirname "$0")/.."
 

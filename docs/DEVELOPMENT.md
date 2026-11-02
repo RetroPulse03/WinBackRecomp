@@ -1,6 +1,6 @@
 # Development Guide
 
-Technical notes for working on WinBack Recompiled. [README.md](../README.md) covers building and playing. [ROM_MAP.md](ROM_MAP.md) describes the ROM layout.
+Technical notes for working on WinBack Recompiled. [README.md](../README.md) covers building and playing. [WinBack Data](https://github.com/RetroPulse03/WinBackData) documents how the game works and its ROM layout.
 
 ## Pipeline
 
@@ -157,7 +157,7 @@ Functions WinBack gives mods are in `mods/include/winback_mod.h`: `winback_mod_f
 To build a mod from `mods/<name>/`:
 
 ```
-sh tools/build_mod.sh mods/test-mod
+sh tools/build_mod.sh mods/<name>
 ```
 
 This writes `generated/mods/<name>/`, ready to copy into `game/mods/`, and `generated/mods/<name>.nrm`. It resolves function names against `generated/winback.us.syms.toml`, so it needs `regen.sh`'s output. Hooks are declared with `RECOMP_HOOK("func_xxxxxxxx")`.
