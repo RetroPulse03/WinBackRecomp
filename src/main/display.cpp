@@ -18,6 +18,7 @@
 
 #include "sdl_include.hpp"
 #include "display.hpp"
+#include "rt64_context.hpp"
 
 namespace R = ultramodern::renderer;
 
@@ -46,8 +47,9 @@ void save(const Settings& s) {
     nlohmann::json j;
     j["window_mode"] = s.window_mode;
     j["resolution"] = s.resolution;
-    j["aspect_ratio"] = s.aspect_ratio;
     j["antialiasing"] = s.antialiasing;
+    j["crop_overscan"] = s.crop_overscan;
+    j["integer_scale"] = s.integer_scale;
     std::ofstream out(settings_path());
     if (out) {
         out << j.dump(4) << '\n';
@@ -85,9 +87,12 @@ void apply_renderer(const Settings& s, bool developer) {
     R::GraphicsConfig cfg = R::get_graphics_config();
     cfg.developer_mode = developer;
     cfg.res_option = s.resolution;
-    cfg.ar_option = s.aspect_ratio;
+    // Always 4:3. Widescreen is hidden until the game's 16:9 view has been worked on: the extra
+    // area at the sides is never cleared, so old frames show through there.
+    cfg.ar_option = R::AspectRatio::Original;
     cfg.msaa_option = s.antialiasing;
     R::set_graphics_config(cfg);
+    winback::set_framing(s.crop_overscan, s.integer_scale);
 }
 
 } // namespace
@@ -100,8 +105,9 @@ void load(bool developer, bool force_fullscreen) {
             nlohmann::json j = nlohmann::json::parse(in);
             s.window_mode = j.value("window_mode", s.window_mode);
             s.resolution = j.value("resolution", s.resolution);
-            s.aspect_ratio = j.value("aspect_ratio", s.aspect_ratio);
             s.antialiasing = j.value("antialiasing", s.antialiasing);
+            s.crop_overscan = j.value("crop_overscan", s.crop_overscan);
+            s.integer_scale = j.value("integer_scale", s.integer_scale);
         }
         catch (const nlohmann::json::exception& e) {
             std::fprintf(stderr, "[display] ignoring settings.json: %s\n", e.what());

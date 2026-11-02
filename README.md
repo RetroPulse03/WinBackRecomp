@@ -78,8 +78,9 @@ Press Select (or Esc) at any time to open the recomp menu over the game; press i
 **Display** holds the picture settings. Change a setting with left and right; it applies straight away and is saved to `settings.json` next to the executable.
 
 - **Window mode:** Windowed, Borderless (a window covering the screen) or Fullscreen (exclusive full screen at your desktop resolution).
-- **Resolution:** how sharply the 3D scene is drawn. Original is the N64's 240 lines, Double is 480, and Match window (the default) draws at the window's own size.
-- **Aspect ratio:** Original (4:3) or Widescreen, which shows more of the scene at the sides when the window is wider than 4:3.
+- **Resolution:** how sharply the 3D scene is drawn. Original is the N64's 240 lines (216 with Crop overscan), Double is twice that, and Match window (the default) draws at the window's own size.
+- **Crop overscan:** WinBack leaves a black border around its picture, which TVs of the time hid past the edge of the screen. On cuts the border off so the picture fills more of the window.
+- **Integer scale:** On enlarges the picture only in whole steps, so every game pixel is the same size. The rest of the window stays black.
 - **Anti-aliasing:** off, or 2x (default), 4x or 8x MSAA.
 
 **Exit Game** closes the program after a confirmation. Progress since your last Controller Pak save is lost.

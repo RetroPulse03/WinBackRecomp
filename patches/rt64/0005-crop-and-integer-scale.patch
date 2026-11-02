@@ -1,0 +1,205 @@
+diff --git a/src/common/rt64_user_configuration.h b/src/common/rt64_user_configuration.h
+index 4857f22..a0aef41 100644
+--- a/src/common/rt64_user_configuration.h
++++ b/src/common/rt64_user_configuration.h
+@@ -103,6 +103,18 @@ namespace RT64 {
+         bool idleWorkActive;
+         bool developerMode;
+ 
++        // The part of the VI's picture to show, as margins in VI coordinates (640x480), and whether
++        // to scale it only by whole multiples so every framebuffer pixel covers the same window pixels.
++        struct Framing {
++            int cropLeft = 0;
++            int cropTop = 0;
++            int cropRight = 0;
++            int cropBottom = 0;
++            bool integerScale = false;
++        };
++
++        Framing framing;
++
+         UserConfiguration();
+         void validate();
+         uint32_t msaaSampleCount() const;
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+index 6451c9d..80bc720 100644
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -100,6 +100,7 @@ namespace RT64 {
+         EnhancementConfiguration::Presentation::Mode presentationMode;
+         UserConfiguration::RefreshRate refreshRate;
+         UserConfiguration::Filtering filtering;
++        UserConfiguration::Framing framing;
+         uint32_t viOriginalRate;
+         uint32_t targetRate;
+         {
+@@ -108,6 +109,7 @@ namespace RT64 {
+             presentationMode = ext.sharedResources->enhancementConfig.presentation.mode;
+             refreshRate = ext.sharedResources->userConfig.refreshRate;
+             filtering = ext.sharedResources->userConfig.filtering;
++            framing = ext.sharedResources->userConfig.framing;
+             viOriginalRate = ext.sharedResources->viOriginalRate;
+             targetRate = ext.sharedResources->targetRate;
+         }
+@@ -319,6 +321,7 @@ namespace RT64 {
+                     renderParams.resolutionScale = colorTarget->resolutionScale;
+                     renderParams.downsamplingScale = 1;
+                     renderParams.filtering = filtering;
++                    renderParams.framing = framing;
+                     renderParams.vi = &present.screenVI;
+ 
+                     const bool useDownsampling = (colorTarget->downsampleMultiplier > 1);
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index 6b0bb31..c2b74c5 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -2009,11 +2009,12 @@ namespace RT64 {
+             ext.sharedQueueResources->configurationMutex.lock();
+             const hlslpp::float2 resolutionScale = ext.sharedQueueResources->resolutionScale;
+             const uint32_t downsampleMultiplier = ext.userConfig->downsampleMultiplier;
++            const UserConfiguration::Framing framing = ext.userConfig->framing;
+             ext.sharedQueueResources->configurationMutex.unlock();
+             RenderViewport viewport;
+             RenderRect scissor;
+             hlslpp::float2 fbHdRegion;
+-            VIRenderer::getViewportAndScissor(ext.swapChain, lastScreenVI, resolutionScale, downsampleMultiplier, viewport, scissor, fbHdRegion);
++            VIRenderer::getViewportAndScissor(ext.swapChain, lastScreenVI, resolutionScale, downsampleMultiplier, viewport, scissor, fbHdRegion, framing);
+ 
+             // Convert the mouse coordinates to native coordinates.
+             // FIXME: This needs a lot more work to be compatible with games with less standard VI modes.
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 1eee157..f39233b 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -209,7 +209,11 @@ namespace RT64 {
+         switch (resolutionMode) {
+         case UserConfiguration::Resolution::WindowIntegerScale:
+             if (ext.sharedResources->swapChainHeight > 0) {
+-                resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + ReferenceHeight - 1) / ReferenceHeight), 1.0f);
++                // Lines cropped from the picture are not shown, so the remaining lines must fill the window.
++                const UserConfiguration::Framing &framing = ext.sharedResources->userConfig.framing;
++                const int croppedHeight = (ReferenceHeight * (framing.cropTop + framing.cropBottom)) / int(VI::Height);
++                const int shownHeight = std::max(ReferenceHeight - croppedHeight, 1);
++                resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + shownHeight - 1) / shownHeight), 1.0f);
+             }
+             else {
+                 resolutionMultiplier = 1.0f;
+diff --git a/src/render/rt64_vi_renderer.cpp b/src/render/rt64_vi_renderer.cpp
+index d597d75..9fc1ada 100644
+--- a/src/render/rt64_vi_renderer.cpp
++++ b/src/render/rt64_vi_renderer.cpp
+@@ -4,6 +4,9 @@
+ 
+ #include "rt64_vi_renderer.h"
+ 
++#include <algorithm>
++#include <cmath>
++
+ #include "shared/rt64_hlsl.h"
+ #include "shared/rt64_video_interface.h"
+ 
+@@ -70,7 +73,7 @@ namespace RT64 {
+         RenderViewport viewport;
+         RenderRect scissor;
+         hlslpp::float2 fbHdRegion;
+-        getViewportAndScissor(p.swapChain, *p.vi, p.resolutionScale, p.downsamplingScale, viewport, scissor, fbHdRegion);
++        getViewportAndScissor(p.swapChain, *p.vi, p.resolutionScale, p.downsamplingScale, viewport, scissor, fbHdRegion, p.framing);
+         p.commandList->setViewports(viewport);
+         p.commandList->setScissors(scissor);
+ 
+@@ -87,7 +90,7 @@ namespace RT64 {
+         p.commandList->drawInstanced(3, 1, 0, 0);
+     }
+ 
+-    void VIRenderer::getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion) {
++    void VIRenderer::getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion, const UserConfiguration::Framing &framing) {
+         // We define three different coordinate spaces to work with to translate the VI parameters into the Window.
+         //
+         // VideoSD: This corresponds to the SD TV Scanline space, which is what the VI natively works on.
+@@ -109,20 +112,55 @@ namespace RT64 {
+         fbHdRegion = computeHDSize(fbSdRegion, resolutionScale, downsamplingScale);
+ 
+         // Query the VI for the current rendering area.
+-        // Scale all the rectangles to the space of the Window.
+         RectI viViewRect = vi.viewRectangle();
+         RectI viCropRect = vi.cropRectangle();
+-        hlslpp::float2 topLeftViewport = fromSDtoHD({ float(viViewRect.x), float(viViewRect.y) }, sdSize, hdSize);
+-        hlslpp::float2 bottomRightViewport = fromSDtoHD({ float(viViewRect.x + viViewRect.w), float(viViewRect.y + viViewRect.h) }, sdSize, hdSize);
+-        topLeftViewport = fromHDtoWindow(topLeftViewport, hdSize, windowSize);
+-        bottomRightViewport = fromHDtoWindow(bottomRightViewport, hdSize, windowSize);
+ 
+-        hlslpp::float2 topLeftScissor = fromSDtoHD({ float(viCropRect.x), float(viCropRect.y) }, sdSize, hdSize);
+-        hlslpp::float2 bottomRightScissor = fromSDtoHD({ float(viCropRect.x + viCropRect.w), float(viCropRect.y + viCropRect.h) }, sdSize, hdSize);
+-        topLeftScissor = fromHDtoWindow(topLeftScissor, hdSize, windowSize);
+-        bottomRightScissor = fromHDtoWindow(bottomRightScissor, hdSize, windowSize);
++        // The shown area is the VI's area minus the margins cropped by the user.
++        hlslpp::float2 shownTopLeft = { float(std::max(viCropRect.x, framing.cropLeft)), float(std::max(viCropRect.y, framing.cropTop)) };
++        hlslpp::float2 shownBottomRight = {
++            float(std::min(viCropRect.x + viCropRect.w, int(VI::Width) - framing.cropRight)),
++            float(std::min(viCropRect.y + viCropRect.h, int(VI::Height) - framing.cropBottom))
++        };
++
++        if ((shownBottomRight.x <= shownTopLeft.x) || (shownBottomRight.y <= shownTopLeft.y)) {
++            shownTopLeft = { float(viCropRect.x), float(viCropRect.y) };
++            shownBottomRight = { float(viCropRect.x + viCropRect.w), float(viCropRect.y + viCropRect.h) };
++        }
++
++        // Find how many window pixels each VI unit covers so the shown area fits the window, centered
++        // on it. Fitting the whole VI area this way does pillarboxing or letterboxing as needed.
++        const hlslpp::float2 sdToHd = hdSize / sdSize;
++        const hlslpp::float2 shownSize = shownBottomRight - shownTopLeft;
++        const hlslpp::float2 shownHdSize = shownSize * sdToHd;
++        const float fitScale = std::min(float(windowSize.x / shownHdSize.x), float(windowSize.y / shownHdSize.y));
++        hlslpp::float2 windowPerSd = sdToHd * fitScale;
++
++        // Integer scaling: each framebuffer row covers the same whole number of window rows.
++        if (framing.integerScale && (fbSize.y > 0)) {
++            const float sdPerRow = float(VI::Height) / float(fbSize.y);
++            const float widthPerHeight = float(sdToHd.x / sdToHd.y);
++            const float shownRows = float(shownSize.y) / sdPerRow;
++            const float shownRowWidths = (float(shownSize.x) * widthPerHeight) / sdPerRow;
++            const float multiple = std::floor(std::min(float(windowSize.y) / shownRows, float(windowSize.x) / shownRowWidths));
++            if (multiple >= 1.0f) {
++                windowPerSd.y = multiple / sdPerRow;
++                windowPerSd.x = windowPerSd.y * widthPerHeight;
++            }
++        }
++
++        const hlslpp::float2 shownCenter = (shownTopLeft + shownBottomRight) / 2.0f;
++        hlslpp::float2 origin = windowSize / 2.0f - shownCenter * windowPerSd;
++        origin = { std::round(float(origin.x)), std::round(float(origin.y)) };
++
++        // Scale all the rectangles to the space of the Window.
++        const hlslpp::float2 topLeftViewport = origin + hlslpp::float2(float(viViewRect.x), float(viViewRect.y)) * windowPerSd;
++        const hlslpp::float2 bottomRightViewport = origin + hlslpp::float2(float(viViewRect.x + viViewRect.w), float(viViewRect.y + viViewRect.h)) * windowPerSd;
++        const hlslpp::float2 topLeftScissor = origin + shownTopLeft * windowPerSd;
++        const hlslpp::float2 bottomRightScissor = origin + shownBottomRight * windowPerSd;
+ 
+         viewport = RenderViewport(topLeftViewport.x, topLeftViewport.y, bottomRightViewport.x - topLeftViewport.x, bottomRightViewport.y - topLeftViewport.y);
+-        scissor = RenderRect(lround(topLeftScissor.x), lround(topLeftScissor.y), lround(bottomRightScissor.x), lround(bottomRightScissor.y));
++        scissor = RenderRect(
++            std::max(lround(topLeftScissor.x), 0L), std::max(lround(topLeftScissor.y), 0L),
++            std::min(lround(bottomRightScissor.x), long(windowSize.x)), std::min(lround(bottomRightScissor.y), long(windowSize.y)));
+     }
+ };
+\ No newline at end of file
+diff --git a/src/render/rt64_vi_renderer.h b/src/render/rt64_vi_renderer.h
+index 9e83151..8d65e8e 100644
+--- a/src/render/rt64_vi_renderer.h
++++ b/src/render/rt64_vi_renderer.h
+@@ -27,12 +27,13 @@ namespace RT64 {
+             uint32_t textureWidth = 0;
+             uint32_t textureHeight = 0;
+             UserConfiguration::Filtering filtering = UserConfiguration::Filtering::Linear;
++            UserConfiguration::Framing framing;
+             const VI *vi = nullptr;
+         };
+ 
+         VIRenderer();
+         ~VIRenderer();
+         void render(const RenderParams &p);
+-        static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion);
++        static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion, const UserConfiguration::Framing &framing = {});
+     };
+ };
+\ No newline at end of file

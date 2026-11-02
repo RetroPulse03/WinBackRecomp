@@ -45,7 +45,9 @@ enum MainItem { MainLevelSelect, MainDisplay, MainReturn, MainExit };
 const char* const main_items[] = {"LEVEL SELECT", "DISPLAY", "RETURN TO GAME", "EXIT GAME"};
 const char* const exit_items[] = {"EXIT GAME", "CANCEL"};
 
-// Display screen rows. Each option's values are its enum's values in order.
+// Display screen rows. Each option's values are its enum's values in order;
+// OFF/ON options are bools.
+enum DisplayItem { DisplayWindowMode, DisplayResolution, DisplayCrop, DisplayInteger, DisplayAntialiasing };
 struct DisplayOption {
     const char* name;
     const char* note;
@@ -56,30 +58,48 @@ const DisplayOption display_options[] = {
                     " takes over the screen; it can help with stutter on some PCs. F11 or Alt+Enter also"
                     " switch between windowed and full screen.",
      {"WINDOWED", "BORDERLESS", "FULLSCREEN"}},
-    {"RESOLUTION", "How sharply 3D is drawn. MATCH WINDOW draws at the window's size. The N64 drew 240"
-                   " lines; ORIGINAL keeps that look.",
-     {"ORIGINAL (240P)", "DOUBLE (480P)", "MATCH WINDOW"}},
-    {"ASPECT RATIO", "WIDESCREEN shows more of the scene to the sides when the window is wider than 4:3.",
-     {"ORIGINAL (4:3)", "WIDESCREEN"}},
+    {"RESOLUTION", "How sharply 3D is drawn. ORIGINAL keeps the N64's look: 240 lines, or 216 with the"
+                   " overscan cropped. DOUBLE draws twice as many. MATCH WINDOW draws at the window's size.",
+     {"ORIGINAL", "DOUBLE", "MATCH WINDOW"}},
+    {"CROP OVERSCAN", "WinBack leaves a black border around its picture, which old TVs hid past the edge"
+                      " of the screen. ON cuts the border off so the picture fills more of the window.",
+     {"OFF", "ON"}},
+    {"INTEGER SCALE", "ON enlarges the picture only in whole steps, so every game pixel is the same size."
+                      " The rest of the window stays black.",
+     {"OFF", "ON"}},
     {"ANTI-ALIASING", "Smooths jagged edges on 3D models. Higher settings cost more graphics power.",
      {"OFF", "2X MSAA", "4X MSAA", "8X MSAA"}},
 };
 
 int display_value(const winback::display::Settings& d, int option) {
     switch (option) {
-        case 0: return int(d.window_mode);
-        case 1: return int(d.resolution);
-        case 2: return int(d.aspect_ratio);
+        case DisplayWindowMode: return int(d.window_mode);
+        case DisplayResolution: return int(d.resolution);
+        case DisplayCrop: return int(d.crop_overscan);
+        case DisplayInteger: return int(d.integer_scale);
         default: return int(d.antialiasing);
     }
+}
+
+// The value as shown. ORIGINAL and DOUBLE give the number of lines shown, which
+// cropping the overscan reduces from 240 to the 216 the game draws.
+std::string display_label(const winback::display::Settings& d, int option) {
+    int v = display_value(d, option);
+    std::string label = display_options[option].values[v];
+    if (option == DisplayResolution && v <= int(ultramodern::renderer::Resolution::Original2x)) {
+        int lines = d.crop_overscan ? 216 : 240;
+        label += " (" + std::to_string(lines * (v + 1)) + "P)";
+    }
+    return label;
 }
 
 void set_display_value(winback::display::Settings& d, int option, int value) {
     namespace R = ultramodern::renderer;
     switch (option) {
-        case 0: d.window_mode = winback::display::WindowMode(value); break;
-        case 1: d.resolution = R::Resolution(value); break;
-        case 2: d.aspect_ratio = R::AspectRatio(value); break;
+        case DisplayWindowMode: d.window_mode = winback::display::WindowMode(value); break;
+        case DisplayResolution: d.resolution = R::Resolution(value); break;
+        case DisplayCrop: d.crop_overscan = value != 0; break;
+        case DisplayInteger: d.integer_scale = value != 0; break;
         default: d.antialiasing = R::Antialiasing(value); break;
     }
 }
@@ -400,11 +420,11 @@ void rebuild(const State& s) {
         set_text("subtitle", "Picture settings");
         set_text("list", rows(int(std::size(display_options)), s.display_sel, [&](int i, bool sel) {
             const DisplayOption& opt = display_options[i];
-            return plate(opt.name, sel, std::string("&lt; ") + opt.values[display_value(s.display, i)] + " &gt;", "value");
+            return plate(opt.name, sel, std::string("&lt; ") + display_label(s.display, i) + " &gt;", "value");
         }));
         const DisplayOption& opt = display_options[s.display_sel];
         set_text("detail", std::string("<div class=\"head\">") + opt.name + "</div>"
-            "<div>" + opt.values[display_value(s.display, s.display_sel)] + "</div>"
+            "<div>" + display_label(s.display, s.display_sel) + "</div>"
             "<div class=\"note\">" + opt.note + "</div>");
         hint = "<span class=\"key\">LEFT/RIGHT</span> CHANGE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
                " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";

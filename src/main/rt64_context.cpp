@@ -4,6 +4,7 @@
 // renders them with Direct3D 12 or Vulkan.
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -116,7 +117,25 @@ void dump_rects(const uint8_t* rdram, uint32_t dl) {
 using UC = RT64::UserConfiguration;
 namespace R = ultramodern::renderer;
 
+// The area WinBack draws its picture in, as margins in VI coordinates (640x480). The game clears and
+// draws only (14,14)-(305,229) of its 320x240 framebuffer (the FILLRECTs in a WINBACK_DLDUMP log), and
+// leaves the rest black for the TV's overscan to hide.
+constexpr UC::Framing game_picture_margins{28, 28, 28, 20};
+
+constexpr uint32_t framing_crop = 1;
+constexpr uint32_t framing_integer = 2;
+std::atomic<uint32_t> framing_flags = 0;
+std::atomic<bool> framing_changed = false;
+
+UC::Framing current_framing() {
+    uint32_t flags = framing_flags.load();
+    UC::Framing f = (flags & framing_crop) ? game_picture_margins : UC::Framing{};
+    f.integerScale = (flags & framing_integer) != 0;
+    return f;
+}
+
 void apply_user_config(RT64::Application* app, const R::GraphicsConfig& cfg) {
+    app->userConfig.framing = current_framing();
     switch (cfg.res_option) {
         case R::Resolution::Original:
             app->userConfig.resolution = UC::Resolution::Manual;
@@ -287,6 +306,10 @@ public:
 
     void update_screen() override {
         winback::stats::screen_updates++;
+        if (framing_changed.exchange(false)) {
+            app->userConfig.framing = current_framing();
+            app->updateUserConfig(false);
+        }
         app->updateScreen();
     }
 
@@ -301,7 +324,8 @@ public:
     }
 
     float get_resolution_scale() const override {
-        constexpr int reference_height = 240;
+        const UC::Framing& framing = app->userConfig.framing;
+        const int reference_height = std::max(240 - (240 * (framing.cropTop + framing.cropBottom)) / 480, 1);
         switch (app->userConfig.resolution) {
             case UC::Resolution::WindowIntegerScale: {
                 int h = app->sharedQueueResources->swapChainHeight;
@@ -319,6 +343,11 @@ private:
 };
 
 } // namespace
+
+void winback::set_framing(bool crop_overscan, bool integer_scale) {
+    framing_flags = (crop_overscan ? framing_crop : 0) | (integer_scale ? framing_integer : 0);
+    framing_changed = true;
+}
 
 std::unique_ptr<ultramodern::renderer::RendererContext>
 winback::create_render_context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode) {

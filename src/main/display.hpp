@@ -13,8 +13,9 @@ namespace winback::display {
     struct Settings {
         WindowMode window_mode = WindowMode::Windowed;
         ultramodern::renderer::Resolution resolution = ultramodern::renderer::Resolution::Auto;
-        ultramodern::renderer::AspectRatio aspect_ratio = ultramodern::renderer::AspectRatio::Expand;
         ultramodern::renderer::Antialiasing antialiasing = ultramodern::renderer::Antialiasing::MSAA2X;
+        bool crop_overscan = false;
+        bool integer_scale = false;
     };
 
     // Reads settings.json and sets the renderer's starting configuration.
