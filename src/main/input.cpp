@@ -33,6 +33,10 @@ struct PadState {
     uint16_t buttons = 0;
     float x = 0.0f;
     float y = 0.0f;
+    // Right stick X, and the C-Left/C-Right it presses for code that only
+    // reads buttons. The player camera reads the stick itself.
+    float cam_x = 0.0f;
+    uint16_t cam_buttons = 0;
 };
 
 std::mutex state_mutex;
@@ -90,9 +94,9 @@ PadState read_controller(SDL_GameController* c, int player) {
     btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, BTN_DR);
     if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0.5f) s.buttons |= BTN_CL;
     if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0.5f) s.buttons |= BTN_CR;
-    float rx = axis(c, SDL_CONTROLLER_AXIS_RIGHTX);
-    if (rx > 0.5f) s.buttons |= BTN_CR;
-    if (rx < -0.5f) s.buttons |= BTN_CL;
+    s.cam_x = axis(c, SDL_CONTROLLER_AXIS_RIGHTX);
+    if (s.cam_x > 0.5f) s.cam_buttons |= BTN_CR;
+    if (s.cam_x < -0.5f) s.cam_buttons |= BTN_CL;
     bool rsc = SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
     if (rsc && !rear_snap_held[player] && in_gameplay()) {
         rear_snap_pending[player] = true;
@@ -200,6 +204,18 @@ extern "C" void winback_camera_frame(void) {
         std::memory_order_relaxed);
 }
 
+// Called by the game thread's camera update: the right stick's X position for
+// analog camera turning, or 0 while C-Left/C-Right is pressed some other way
+// (triggers, keyboard, scripted presses), so that those turn at full speed.
+extern "C" float winback_camera_stick(int controller_num) {
+    if (controller_num < 0 || controller_num >= max_players) {
+        return 0.0f;
+    }
+    std::lock_guard lock{state_mutex};
+    const PadState& p = pads[controller_num];
+    return (p.buttons & (BTN_CL | BTN_CR)) ? 0.0f : p.cam_x;
+}
+
 // Called by the game thread's camera update; true once per right stick click.
 extern "C" int winback_take_rear_snap(int controller_num) {
     if (controller_num < 0 || controller_num >= max_players) {
@@ -241,6 +257,10 @@ void winback::input::poll() {
         }
         PadState c = read_controller(controllers[i], i);
         next[i].buttons |= c.buttons;
+        next[i].cam_buttons |= c.cam_buttons;
+        if (std::fabs(c.cam_x) > std::fabs(next[i].cam_x)) {
+            next[i].cam_x = c.cam_x;
+        }
         if (std::fabs(c.x) + std::fabs(c.y) > std::fabs(next[i].x) + std::fabs(next[i].y)) {
             next[i].x = c.x;
             next[i].y = c.y;
@@ -255,7 +275,7 @@ void winback::input::poll() {
     if (menu_guard) {
         bool idle = true;
         for (const PadState& p : next) {
-            idle &= p.buttons == 0 && p.x == 0.0f && p.y == 0.0f;
+            idle &= p.buttons == 0 && p.cam_buttons == 0 && p.x == 0.0f && p.y == 0.0f && p.cam_x == 0.0f;
         }
         menu_guard = winback::menu::is_open() || !idle;
         next = {};
@@ -269,7 +289,7 @@ bool winback::input::get(int controller_num, uint16_t* buttons, float* x, float*
         return false;
     }
     std::lock_guard lock{state_mutex};
-    *buttons = pads[controller_num].buttons;
+    *buttons = pads[controller_num].buttons | pads[controller_num].cam_buttons;
     *x = pads[controller_num].x;
     *y = pads[controller_num].y;
     return true;

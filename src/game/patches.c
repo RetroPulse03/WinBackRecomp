@@ -61,3 +61,46 @@ RECOMP_FUNC void func_800CE0D4(uint8_t* rdram, recomp_context* ctx) {
     ctx->r4 = s;
     func_800CDF50(rdram, ctx);
 }
+
+float winback_camera_stick(int controller_num);
+
+// Analog camera turning (hook at 0x80035B0C in func_80035970, the player
+// camera update). Holding C-Left/C-Right adds a step ($f6, 1 degree) to the
+// camera's turn speed (camera+0x110, radians per frame) while it is below
+// 6 degrees, and every frame the speed falls 0.5 degrees towards zero. With
+// the right stick, the step, the limit and the fall while turning are scaled
+// by how far the stick is pushed, so full deflection turns exactly like the
+// buttons. Returns 1 when it has done the frame's turning; the hook then
+// skips the game's own. Scripted turns (flags 0x8000, 0x4, 0x2000 in
+// camera+0x132) are left to the game.
+//     $a2 = camera, $t1 = the button that turns the speed down, $t2 = up.
+int winback_camera_analog(uint8_t* rdram, recomp_context* ctx) {
+    gpr cam = ctx->r6;
+    if (MEM_HU(0x132, cam) & 0xA004) {
+        return 0;
+    }
+    float stick = winback_camera_stick(MEM_H(0x18, cam));
+    if (stick == 0.0f) {
+        return 0;
+    }
+    // Stick right acts as C-Right (0x0001), whichever way the game turns it.
+    float scale = stick > 0.0f ? stick : -stick;
+    float dir = (ctx->r9 & 0x0001) ? -1.0f : 1.0f;
+    if (stick < 0.0f) {
+        dir = -dir;
+    }
+    union { uint32_t u; float f; } speed = { (uint32_t)MEM_W(0x110, cam) };
+    float magnitude = speed.f > 0.0f ? speed.f : -speed.f;
+    if (magnitude < 0.10472f * scale) {
+        speed.f += dir * ctx->f6.fl * scale;
+        MEM_H(0x132, cam) = MEM_HU(0x132, cam) | 0x1001;
+    }
+    if (speed.f > 0.0f) {
+        speed.f -= 0.0087265f * scale;
+    }
+    else if (speed.f < 0.0f) {
+        speed.f += 0.0087265f * scale;
+    }
+    MEM_W(0x110, cam) = speed.u;
+    return 1;
+}

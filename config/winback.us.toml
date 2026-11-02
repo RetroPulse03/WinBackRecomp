@@ -59,6 +59,14 @@ func = "func_80035970"
 before_vram = 0x80035D70
 text = "{ extern int winback_take_rear_snap(int); if (winback_take_rear_snap(MEM_H(0x18, ctx->r6)) && !(MEM_HU(0x132, ctx->r6) & 0x200) && MEM_H(0x16EC, ctx->r8) != 1) { MEM_H(0x132, ctx->r6) = MEM_HU(0x132, ctx->r6) | 0x200; } }"
 
+# Right stick X: analog camera turning (winback_camera_analog in
+# src/game/patches.c). When it has turned the camera, skip the game's button
+# turning and the speed's fall to zero, to 0x80035D00 ($a3 = 0 there).
+[[patches.hook]]
+func = "func_80035970"
+before_vram = 0x80035B0C
+text = "{ extern int winback_camera_analog(uint8_t*, recomp_context*); if (winback_camera_analog(rdram, ctx)) { ctx->r7 = 0; goto L_80035D00; } }"
+
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.

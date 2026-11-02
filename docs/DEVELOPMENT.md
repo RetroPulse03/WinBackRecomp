@@ -96,6 +96,14 @@ The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in
 
 The runtime's config path is the executable's folder (`main.cpp`), and RT64's data path is `rt64/` inside it (`rt64_context.cpp`). The stored ROM copy, `saves/`, `mods/`, `mod_config/`, `mods.json`, `settings.json` and `rt64/` all live there. Nothing may be written to per-user system folders such as AppData or Documents. The release zip must not contain any of these files, because launcher updates unpack over the install folder.
 
+## Camera
+
+The player camera is the object at `obj+0x2C` in `func_80035970` (input) and `func_800390EC` (placement). Its position is at `+0x0`, the point it looks at (the player) at `+0x28`, the controller number at `+0x18` and its flags at `+0x132`.
+
+- **Turning:** `+0x110` is the turn speed in radians per frame. Holding C-Left/C-Right adds 1° per frame while it is below 6°, and it falls by 0.5° per frame towards zero. `func_800390EC` adds it, with other short-lived offsets (`+0x11C`, `+0x150`, `+0x158`, `+0x168`, `+0x16C`), to the current angle around the player.
+- **Analog turning:** the right stick's X position scales that step, limit and fall (`winback_camera_analog` in `src/game/patches.c`), so full deflection matches the buttons and smaller deflections turn slower. Triggers and keys still press C-Left/C-Right at full speed. The stick still presses C-Left/C-Right past half deflection for anything else that reads buttons.
+- **Height and tilt:** the camera sits `+0x10C` above a pivot at 0.8 × `+0x10C` above the player. `+0x154` is a tilt (pitch) applied after the turn, and it only changes the camera's height: the horizontal distance stays the same. The game sets the tilt itself (`func_80036CD8`, at most 2° per frame and limited to ±0.3 rad) and sets flag 0x10 to keep it. Without flags 0x10 and 0x400 it shrinks by ×0.8 each frame.
+
 ## Rendering
 
 Rendering bugs are fixed in the graphics emulation, not by patching the game. Check what the real microcode and RDP do, using the [F3DEX2 disassembly](https://github.com/Mr-Wiseguy/f3dex2) and [parallel-rdp](https://github.com/Themaister/parallel-rdp), and compare against a ParaLLEl-RDP capture.
