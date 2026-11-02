@@ -14,7 +14,7 @@ A native PC port of **WinBack: Covert Operations** (N64, USA), made by static re
 
 **Early release (v0.1).** The game plays from boot, through the intros, title screen and Controller Pak save, into the first mission at 60 fps. Mission 1 has been play-tested by hand, including aiming with the laser sight. Later missions haven't been tested much yet.
 
-If the game freezes or crashes, please [open an issue](https://github.com/RetroPulse03/WinBackRecomp/issues) and say where it happened. Running `WinBackRecompiled.exe --console` shows a log that helps with diagnosis.
+If the game freezes or crashes, please [open an issue](https://github.com/RetroPulse03/WinBackRecomp/issues) and say where it happened. Please attach `logs/winback.log` from the game folder, which helps with diagnosis.
 
 ## Installing
 
@@ -124,7 +124,7 @@ tools\vsenv.cmd cmake --build build
 | `patches/` | Patches applied to dependencies |
 | `tools/` | Code generators and build helpers |
 | `docs/` | Development notes and ROM map |
-| `recomplauncher.json` | Launcher manifest shipped in the release zip |
+| `recomplauncher.json` | RecompLauncher file shipped in the release zip: ROM check, settings, setup step |
 
 These folders are created locally and never committed: `game/` (the playable game, with its saves and data), `rom/` (your ROM), `generated/` (everything produced from the ROM, plus logs and screenshots), `deps/`, `build/` (compiler output) and `dist/` (release zips).
 

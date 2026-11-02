@@ -26,6 +26,8 @@ foreach ($f in "WinBackRecompiled.exe", "SDL2.dll", "dxil.dll", "dxcompiler.dll"
     Copy-Item (Join-Path $BuildDir $f) $stage
 }
 Copy-Item README.md, LICENSE, recomplauncher.json $stage
+# The game always keeps its data in its own folder. This tells launchers so.
+Set-Content (Join-Path $stage "portable.txt") "WinBack Recompiled keeps its saves, settings and mods in this folder."
 # The menu font is compiled into the exe; its license travels with it.
 Copy-Item assets\fonts\OFL.txt (Join-Path $stage "Lato-OFL.txt")
 

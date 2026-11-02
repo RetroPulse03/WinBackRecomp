@@ -90,3 +90,9 @@ void winback::audio::set_frequency(uint32_t freq) {
         open_device(freq);
     }
 }
+
+void winback::audio::pause() {
+    if (device != 0) {
+        SDL_PauseAudioDevice(device, 1);
+    }
+}

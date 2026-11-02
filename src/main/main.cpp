@@ -7,12 +7,17 @@
 //          --fullscreen
 //          --developer    RT64 debug UI
 //          --console      show log output (also on when WINBACK_DEBUG is set)
+//          --prepare      store the ROM given with --rom and exit, with no window
+//                         (RecompLauncher's setup step)
+//
+// Without a console or redirected output, the log goes to logs/winback.log.
 
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -22,6 +27,7 @@
 #include <Windows.h>
 #include <commdlg.h>
 #include <timeapi.h>
+#include <tlhelp32.h>
 #endif
 
 #include "librecomp/game.hpp"
@@ -53,6 +59,9 @@ SDL_Window* window = nullptr;
 bool fullscreen = false;
 bool developer = false;
 bool game_started = false;
+// Nobody may be there to answer a dialog: RecompLauncher's setup step and Big Picture mode, where
+// the launcher has already asked for the ROM. A ROM problem ends in exit_no_rom instead.
+bool no_dialogs = false;
 std::atomic<bool> mod_load_failed{false};
 std::string rom_arg;
 
@@ -114,7 +123,12 @@ bool ensure_rom() {
     if (!rom_arg.empty()) {
         candidates.emplace_back(rom_arg);
     }
+    // The launcher's pick is the one to use or refuse, not a reason to go looking for another.
+    bool search = rom_arg.empty() || !no_dialogs;
     for (const fs::path& dir : {exe_dir(), fs::current_path(), fs::current_path() / "rom"}) {
+        if (!search) {
+            break;
+        }
         std::error_code ec;
         for (const auto& e : fs::directory_iterator(dir, ec)) {
             auto ext = e.path().extension().string();
@@ -125,6 +139,10 @@ bool ensure_rom() {
     }
     if (select_rom_from(candidates)) {
         return true;
+    }
+    if (no_dialogs) {
+        std::fprintf(stderr, "[winback] no usable ROM\n");
+        return false;
     }
 #ifdef _WIN32
     while (true) {
@@ -207,12 +225,16 @@ void update_gfx(void*) {
 }
 
 #ifdef _WIN32
+bool has_output() {
+    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+    return GetConsoleWindow() != nullptr || (out != nullptr && out != INVALID_HANDLE_VALUE);
+}
+
 // Release builds use the GUI subsystem. Attach to the launching terminal, or
 // open a new console, so logs and crash messages stay visible when asked for.
 // Output already redirected to a file or pipe is left alone.
 void open_console() {
-    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (GetConsoleWindow() != nullptr || (out != nullptr && out != INVALID_HANDLE_VALUE)) {
+    if (has_output()) {
         return;
     }
     if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
@@ -220,6 +242,44 @@ void open_console() {
     }
     std::freopen("CONOUT$", "w", stdout);
     std::freopen("CONOUT$", "w", stderr);
+}
+
+// Keeps the log in logs/winback.log, which RecompLauncher sends with a crash report.
+void open_log() {
+    std::error_code ec;
+    fs::create_directories(exe_dir() / "logs", ec);
+    fs::path path = exe_dir() / "logs" / "winback.log";
+    std::ofstream truncate(path);
+    truncate.close();
+    _wfreopen(path.c_str(), L"a", stdout);
+    _wfreopen(path.c_str(), L"a", stderr);
+}
+
+// Waits out a restarted game while a launcher watches this process. The launcher takes this
+// process ending as the end of the session, so this one stays, hidden and stopped, and ends with
+// the new one's exit code. Nothing past this point needs the other threads.
+[[noreturn]] void stand_by_for(HANDLE process) {
+    DWORD id = GetCurrentThreadId();
+    HANDLE threads = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (threads != INVALID_HANDLE_VALUE) {
+        THREADENTRY32 entry{};
+        entry.dwSize = sizeof(entry);
+        for (BOOL more = Thread32First(threads, &entry); more; more = Thread32Next(threads, &entry)) {
+            if (entry.th32OwnerProcessID != GetCurrentProcessId() || entry.th32ThreadID == id) {
+                continue;
+            }
+            if (HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, entry.th32ThreadID)) {
+                SuspendThread(thread);
+                CloseHandle(thread);
+            }
+        }
+        CloseHandle(threads);
+    }
+    DWORD code = EXIT_SUCCESS;
+    WaitForSingleObject(process, INFINITE);
+    GetExitCodeProcess(process, &code);
+    TerminateProcess(GetCurrentProcess(), code);
+    std::_Exit(int(code));
 }
 #endif
 
@@ -237,8 +297,17 @@ void winback::exit_app(bool restart) {
         STARTUPINFOW si{};
         si.cb = sizeof(si);
         PROCESS_INFORMATION pi{};
+        bool launcher = std::getenv("RECOMPLAUNCHER") != nullptr;
+        if (launcher) {
+            // Before the new process starts, so the two don't draw or play sound together.
+            SDL_HideWindow(window);
+            winback::audio::pause();
+        }
         if (CreateProcessW(path, command_line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);
+            if (launcher) {
+                stand_by_for(pi.hProcess);
+            }
             CloseHandle(pi.hProcess);
         }
         else {
@@ -255,6 +324,8 @@ int main(int argc, char** argv) {
     // RecompLauncher's controller-focused Big Picture mode.
     const char* launcher_mode = std::getenv("RECOMPLAUNCHER_MODE");
     fullscreen = launcher_mode != nullptr && std::strcmp(launcher_mode, "bigpicture") == 0;
+    no_dialogs = fullscreen;
+    bool prepare = false;
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
             rom_arg = argv[++i];
@@ -268,11 +339,19 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--console") == 0) {
             console = true;
         }
+        else if (std::strcmp(argv[i], "--prepare") == 0) {
+            prepare = true;
+            no_dialogs = true;
+        }
     }
 
 #ifdef _WIN32
     if (console) {
         open_console();
+    }
+    // The launcher's setup step reads progress from the output it gave us.
+    else if (!prepare && (std::getenv("RECOMPLAUNCHER") != nullptr || !has_output())) {
+        open_log();
     }
     timeBeginPeriod(1);
 #endif
@@ -287,8 +366,15 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     recomp::check_all_stored_roms();
+    if (prepare) {
+        std::printf("progress 0.1 Checking your ROM\n");
+    }
     if (!ensure_rom()) {
         return exit_no_rom;
+    }
+    if (prepare) {
+        std::printf("progress 1 Your ROM is ready\n");
+        return EXIT_SUCCESS;
     }
     winback::display::load(developer, fullscreen);
     winback::menu::set_render_hooks();

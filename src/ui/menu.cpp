@@ -474,6 +474,33 @@ std::string rows(int count, int sel, auto&& make_row) {
     return out;
 }
 
+// RecompLauncher says which controller is plugged in; otherwise it's the first one SDL finds.
+bool playstation_pad() {
+    if (const char* pad = std::getenv("RECOMPLAUNCHER_PAD")) {
+        return std::strcmp(pad, "playstation") == 0;
+    }
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (SDL_IsGameController(i)) {
+            SDL_GameControllerType type = SDL_GameControllerTypeForIndex(i);
+            return type == SDL_CONTROLLER_TYPE_PS3 || type == SDL_CONTROLLER_TYPE_PS4 || type == SDL_CONTROLLER_TYPE_PS5;
+        }
+    }
+    return false;
+}
+
+// The hints are written with Xbox's button names, which share their positions with these.
+std::string for_this_pad(std::string hint) {
+    if (playstation_pad()) {
+        for (const auto& [from, to] : {std::pair{">A<", ">CROSS<"}, std::pair{">B<", ">CIRCLE<"}}) {
+            size_t at = hint.find(from);
+            if (at != std::string::npos) {
+                hint.replace(at, std::strlen(from), to);
+            }
+        }
+    }
+    return hint;
+}
+
 void rebuild(const State& s) {
     namespace L = winback::levels;
     std::string hint = "<span class=\"key\">A</span> CHOOSE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
@@ -630,7 +657,7 @@ void rebuild(const State& s) {
                                               : "Not reached yet: loads a fresh stage with you placed here.") + "</div>");
         }
     }
-    set_text("hint", hint);
+    set_text("hint", for_this_pad(hint));
 }
 
 void init_hook(RT64::RenderInterface* rhi, RT64::RenderDevice* device) {

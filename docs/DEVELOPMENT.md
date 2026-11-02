@@ -56,7 +56,9 @@ These environment variables are read at startup.
 | `WINBACK_JUMP=5@20,12.1@60` | Level Select jumps at the given seconds: stage 5's start at 20 s, then stage 12's first checkpoint at 60 s. |
 | `WINBACK_MENUPRESS=select@6,a@8,down@9` | Scripts recomp menu presses: `select up down left right a b`. |
 | `WINBACK_RECORD_AT=34` | Records the game's current checkpoint snapshot at that second, as if a checkpoint had triggered. |
-| `RECOMPLAUNCHER_MODE=bigpicture` | Set by RecompLauncher's controller mode; starts in fullscreen. |
+| `RECOMPLAUNCHER=1` | Set by RecompLauncher. The log goes to `logs/winback.log`, and a restart keeps the first process waiting so the launcher's session continues. |
+| `RECOMPLAUNCHER_MODE=bigpicture` | Set by RecompLauncher's controller mode; starts in fullscreen and shows no ROM dialogs. |
+| `RECOMPLAUNCHER_PAD=playstation` | Set by RecompLauncher; the menu's hints say CROSS and CIRCLE. Without it the first controller's type decides. |
 
 This sequence reaches the first mission and ends at the pause menu:
 
@@ -94,7 +96,7 @@ The Controller Pak is implemented in `src/game/controller_pak.cpp` and stored in
 
 ### Portable data
 
-The runtime's config path is the executable's folder (`main.cpp`), and RT64's data path is `rt64/` inside it (`rt64_context.cpp`). The stored ROM copy, `saves/`, `mods/`, `mod_config/`, `mods.json`, `settings.json` and `rt64/` all live there. Nothing may be written to per-user system folders such as AppData or Documents. The release zip must not contain any of these files, because launcher updates unpack over the install folder.
+The runtime's config path is the executable's folder (`main.cpp`), and RT64's data path is `rt64/` inside it (`rt64_context.cpp`). The stored ROM copy, `saves/`, `logs/`, `mods/`, `mod_config/`, `mods.json`, `settings.json` and `rt64/` all live there. The release's `portable.txt` tells launchers so. Nothing may be written to per-user system folders such as AppData or Documents. The release zip must not contain any of these files, because launcher updates unpack over the install folder.
 
 ## Camera
 
@@ -196,8 +198,18 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 - The asset name carries the system and processor (`-Windows-x64.zip`, later `-Linux-x64.AppImage`). Launchers choose the file for the player's PC from those words.
 - The executable sits at the top of the zip. Updates unpack over the install folder, so the release must not contain files the game writes at run time.
-- `recomplauncher.json` (RecompLauncher SDK level 1) sits next to the executable. It names the program, the save folder (`{install}/saves`) and the message for exit code 2 (no ROM selected). RecompLauncher's game check only understands disc images and folders, so the executable finds the ROM itself and shows an Open dialog when there isn't one.
+- `recomplauncher.json` (RecompLauncher SDK level 3) sits next to the executable. See [RecompLauncher](#recomplauncher).
 - Listing requires a submission on each site: [recompstore.com/submit](https://recompstore.com/submit?platform=pc) and [quiverlauncher.com/submit](https://quiverlauncher.com/submit).
+
+### RecompLauncher
+
+- **The player's ROM:** `game` asks for a file and `game.check` compares the ROM header's cartridge ID (`WD`), region (`E`) and revision (0). The launcher's code reads these `n64_` keys (`Check` in its `src-tauri/src/profile.rs`), but its published guide and schema don't list them yet, so an editor using the schema flags them. `game.dumps` holds the USA ROM's size and CRC32 for the launcher's "verified" badge.
+- **Setup step:** `prepare` runs `WinBackRecompiled.exe --prepare --rom {game}`, which verifies and stores the ROM with no window and prints `progress` lines. It exits with 2 if the ROM can't be used. Play also passes `--rom {game}`, which does nothing once a ROM is stored.
+- **A ROM the launcher picked is never swapped for another:** in Big Picture mode and the setup step (`no_dialogs` in `main.cpp`) the game doesn't search other folders or open dialogs when `--rom` is given.
+- **Settings:** the launcher edits `settings.json`, the same file the menu's Display screen uses. A value missing from the file keeps the game's default, so keep `defaults` in step with `display.hpp` and the choices in step with the enums' JSON names.
+- **Restart:** the launcher treats the process it started ending as the session's end, so with `RECOMPLAUNCHER` set `exit_app(true)` hides the window, stops its other threads and waits for the new process, then exits with its code.
+- **Checking the file:** in the launcher, Settings > Developers > Developer tools, then "Add a build" with a folder holding the exe and `recomplauncher.json`.
+- **Not used:** `mods`, until the game has a Thunderstore community or a GameBanana page.
 
 ## Roadmap
 

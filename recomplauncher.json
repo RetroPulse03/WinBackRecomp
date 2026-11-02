@@ -3,11 +3,100 @@
   "format": 1,
   "name": "WinBack Recompiled",
   "repo": "RetroPulse03/WinBackRecomp",
-  "start": {
-    "program": ["WinBackRecompiled.exe"]
+  "game": {
+    "kind": "iso",
+    "label": "Your WinBack: Covert Operations N64 ROM, USA release (.z64, .n64 or .v64).",
+    "check": { "n64_id": "WD", "n64_region": "E", "n64_rev": 0 },
+    "dumps": [
+      { "name": "USA", "size": 16777216, "crc32": "64c817c5" }
+    ]
   },
-  "saves": ["{install}/saves"],
+  "start": {
+    "program": ["WinBackRecompiled.exe"],
+    "args": ["--rom", "{game}"]
+  },
+  "prepare": {
+    "program": ["WinBackRecompiled.exe"],
+    "args": ["--prepare", "--rom", "{game}"],
+    "label": "Checking your ROM and keeping a copy in the game's folder",
+    "timeout": 120
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "json",
+      "file": [{ "path": "{install}/settings.json" }]
+    }
+  ],
+  "settings": [
+    {
+      "id": "window_mode",
+      "label": "Window mode",
+      "help": "Borderless covers the screen and switches away instantly. Fullscreen can help with stutter on some PCs.",
+      "choices": [
+        { "label": "Windowed", "set": { "window_mode": "\"Windowed\"" } },
+        { "label": "Borderless", "set": { "window_mode": "\"Borderless\"" } },
+        { "label": "Fullscreen", "set": { "window_mode": "\"Fullscreen\"" } }
+      ],
+      "defaults": { "window_mode": "\"Windowed\"" }
+    },
+    {
+      "id": "resolution",
+      "label": "Resolution",
+      "help": "How sharply 3D is drawn. Original keeps the N64's look; Match window draws at the window's size.",
+      "choices": [
+        { "label": "Original", "set": { "resolution": "\"Original\"" } },
+        { "label": "Double", "set": { "resolution": "\"Original2x\"" } },
+        { "label": "Match window", "set": { "resolution": "\"Auto\"" } }
+      ],
+      "defaults": { "resolution": "\"Auto\"" }
+    },
+    {
+      "id": "antialiasing",
+      "label": "Anti-aliasing",
+      "help": "Smooths jagged edges on 3D models. Higher settings cost more graphics power.",
+      "choices": [
+        { "label": "Off", "set": { "antialiasing": "\"None\"" } },
+        { "label": "2x MSAA", "set": { "antialiasing": "\"MSAA2X\"" } },
+        { "label": "4x MSAA", "set": { "antialiasing": "\"MSAA4X\"" } },
+        { "label": "8x MSAA", "set": { "antialiasing": "\"MSAA8X\"" } }
+      ],
+      "defaults": { "antialiasing": "\"MSAA2X\"" }
+    },
+    {
+      "id": "crop_overscan",
+      "label": "Crop overscan",
+      "help": "Cuts off the black border old TVs hid, so the picture fills more of the window.",
+      "choices": [
+        { "label": "Off", "set": { "crop_overscan": "false" } },
+        { "label": "On", "set": { "crop_overscan": "true" } }
+      ],
+      "defaults": { "crop_overscan": "false" }
+    },
+    {
+      "id": "integer_scale",
+      "label": "Integer scale",
+      "help": "Enlarges the picture only in whole steps, so every game pixel is the same size.",
+      "choices": [
+        { "label": "Off", "set": { "integer_scale": "false" } },
+        { "label": "On", "set": { "integer_scale": "true" } }
+      ],
+      "defaults": { "integer_scale": "false" }
+    }
+  ],
+  "saves": ["{install}/saves", "{install}/settings.json"],
+  "folders": {
+    "saves": [{ "path": "{install}/saves" }],
+    "logs": [{ "path": "{install}/logs" }],
+    "mods": [{ "path": "{install}/mods" }]
+  },
+  "actions": [
+    { "id": "open_saves", "label": "Open saves folder", "open": "saves" },
+    { "id": "open_mods", "label": "Open mods folder", "open": "mods" },
+    { "id": "open_logs", "label": "Open logs folder", "open": "logs" }
+  ],
+  "looks": { "graphics": "vulkan" },
   "exit_codes": {
-    "2": "No WinBack - Covert Operations (USA) ROM was selected. Start the game again and pick your big-endian .z64 ROM."
+    "2": "That ROM couldn't be used. The game needs the USA release of WinBack: Covert Operations, unmodified. Pick your copy again on the game's page."
   }
 }
