@@ -122,6 +122,7 @@ add_executable(WinBackRecompiled
     src/main/audio.cpp
     src/main/input.cpp
     src/main/display.cpp
+    src/main/mods.cpp
     src/ui/menu.cpp
     src/ui/ui_renderer.cpp
 )

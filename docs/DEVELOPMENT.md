@@ -129,7 +129,8 @@ RT64's frame interpolation is off (`RefreshRate::Original` in `display.cpp`). It
 - `src/ui/ui_renderer.cpp` is the RmlUi render interface on RT64's RHI, adapted from Zelda64Recomp's. It uses RmlUi's compatibility interface with generated textures only. RmlUi's vertex colours are premultiplied but its font textures aren't, so the pixel shader premultiplies the texture and blending is `ONE / INV_SRC_ALPHA`.
 - `src/ui/menu.rml` holds the layout and style. It is compiled into the executable with the Lato fonts (`file_to_c`), so the release needs no extra files. Sizes are in `dp`, where 1080 dp is the window height. The look imitates the game's pause screen. Reading the game's own plate textures and fonts from the ROM at run time is a later step.
 - The visible rows are rebuilt as RML whenever the state changes. Only 10 rows are shown at a time.
-- Entries: Level Select, Display, Return to Game and Exit Game. Exit Game asks for confirmation, then calls `ultramodern::quit()` as closing the window does. Display changes and quitting run on the window thread after the menu's lock is released.
+- Entries: Level Select, Display, Mods, Return to Game and Exit Game. Exit Game asks for confirmation, then calls `winback::exit_app` as closing the window does. Display changes and quitting run on the window thread after the menu's lock is released.
+- `exit_app` (`main.cpp`) ends the process directly. The runtime's own shutdown frees game memory while the game's threads still run, which crashed on exit.
 
 ### Display settings
 
@@ -140,6 +141,26 @@ Crop Overscan and Integer Scale go to RT64 through `winback::set_framing` (`rt64
 The aspect ratio is fixed at 4:3. The Widescreen option is hidden until the game's 16:9 view has been worked on: the area beyond 4:3 is never cleared, so old frames (laser lines) stay there.
 
 Changing anti-aliasing during gameplay could stop rendering for good (RT64 deadlock, fixed by `rt64/0003-msaa-change-deadlock.patch`). A rendering stop seen once after a resolution change went through the same wait and was probably the same bug. To diagnose a stuck renderer, attach lldb (`lldb --batch -p <pid> -o "bt all"`) and look at the `RT64 Present` and workload threads.
+
+## Mods
+
+Mods are named folders (or single `.nrm` files, which are zips of the same files) in `mods/` next to the executable. A folder must contain `mod.json`; its `id`, not the folder's name, identifies the mod. The mod game id is `winback`. On/off state is in `mods.json` and settings in `mod_config/<id>.json`.
+
+`src/main/mods.cpp` is the menu's view of the runtime's mods.
+
+- **On/off needs a restart.** The runtime loads code mods once while the game boots and ignores `enable_mod` after that. A change waits in `pending` until `exit_app` writes it to `mods.json`. Mods added to the folder also appear after a restart, because scanning again would close the loaded ones.
+- **Settings apply live.** The menu calls `set_mod_config_value`, and a mod reads the value with `recomp_get_config_u32` and friends. The runtime saves once options have been quiet for a second, so `mods::finish` waits for that before exiting. Text options are shown but can't be edited yet.
+- **Broken mods:** a mod that can't be opened is listed with the reason (`patches/N64ModernRuntime/0001-keep-mod-errors.patch` keeps the errors, which the runtime only printed). A mod that fails to load would leave the game stuck, so after the runtime's message `main.cpp` turns off the failed mods and restarts.
+
+Functions WinBack gives mods are in `mods/include/winback_mod.h`: `winback_mod_file_size` and `winback_mod_read_file` read files from the mod's own folder or `.nrm`, and `winback_mod_log` prints to the log.
+
+To build a mod from `mods/<name>/`:
+
+```
+sh tools/build_mod.sh mods/test-mod
+```
+
+This writes `generated/mods/<name>/`, ready to copy into `game/mods/`, and `generated/mods/<name>.nrm`. It resolves function names against `generated/winback.us.syms.toml`, so it needs `regen.sh`'s output. Hooks are declared with `RECOMP_HOOK("func_xxxxxxxx")`. The compiler must have a MIPS target, which the current LLVM Windows installer (23.1.4) lacks.
 
 ## Level Select
 
@@ -182,7 +203,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
 3. **Settings:** controls (Classic/Modern, remapping), the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; widescreen is hidden until it is worked on.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
-5. **Mods:** a RecompModTool template and SDK headers (mod game id `winback`), then widescreen, split-screen and custom characters.
+5. **Mods:** the Mods menu, restart, error reporting and file loading are done (see [Mods](#mods)). Next: proving a code mod's hooks work, then texture packs, widescreen, split-screen and custom characters.
 6. **Linux build.**
 
 The long-term goal for the menu is to move its options into rebuilt in-game menus that match the game's own style.

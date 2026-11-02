@@ -8,6 +8,7 @@
 //          --developer    RT64 debug UI
 //          --console      show log output (also on when WINBACK_DEBUG is set)
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -35,6 +36,8 @@
 #include "input.hpp"
 #include "menu.hpp"
 #include "display.hpp"
+#include "app.hpp"
+#include "mods.hpp"
 
 namespace fs = std::filesystem;
 
@@ -50,6 +53,7 @@ SDL_Window* window = nullptr;
 bool fullscreen = false;
 bool developer = false;
 bool game_started = false;
+std::atomic<bool> mod_load_failed{false};
 std::string rom_arg;
 
 fs::path exe_dir() {
@@ -61,6 +65,14 @@ fs::path exe_dir() {
 
 void message_box(const char* msg) {
     std::fprintf(stderr, "%s\n", msg);
+    // The runtime reports mods that fail to load here, and then the game can't
+    // start. They're turned off and the game restarts without them.
+    if (std::strncmp(msg, "Error loading mods", 18) == 0) {
+        std::string text = std::string(msg) + "\nThese mods will be turned off, and the game will restart.";
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, app_title, text.c_str(), window);
+        mod_load_failed = true;
+        return;
+    }
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, app_title, msg, window);
 }
 
@@ -167,6 +179,10 @@ void update_gfx(void*) {
         game_started = true;
         recomp::start_game(winback::game_id, "");
     }
+    if (mod_load_failed) {
+        winback::mods::turn_off_failed();
+        winback::exit_app(true);
+    }
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (winback::menu::handle_event(ev)) {
@@ -174,7 +190,7 @@ void update_gfx(void*) {
         }
         switch (ev.type) {
             case SDL_QUIT:
-                ultramodern::quit();
+                winback::exit_app(false);
                 break;
             case SDL_KEYDOWN:
                 if (ev.key.keysym.scancode == SDL_SCANCODE_F11 ||
@@ -208,6 +224,31 @@ void open_console() {
 #endif
 
 } // namespace
+
+void winback::exit_app(bool restart) {
+    winback::mods::finish();
+#ifdef _WIN32
+    if (restart) {
+        // The new process inherits the environment; scripted menu presses must not run twice.
+        SetEnvironmentVariableW(L"WINBACK_MENUPRESS", nullptr);
+        wchar_t path[MAX_PATH];
+        GetModuleFileNameW(nullptr, path, MAX_PATH);
+        std::wstring command_line = GetCommandLineW();
+        STARTUPINFOW si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        if (CreateProcessW(path, command_line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+        else {
+            message_box("Couldn't restart the game. Please start it again yourself.");
+        }
+    }
+    TerminateProcess(GetCurrentProcess(), EXIT_SUCCESS);
+#endif
+    std::_Exit(EXIT_SUCCESS);
+}
 
 int main(int argc, char** argv) {
     bool console = std::getenv("WINBACK_DEBUG") != nullptr;
@@ -251,6 +292,7 @@ int main(int argc, char** argv) {
     }
     winback::display::load(developer, fullscreen);
     winback::menu::set_render_hooks();
+    winback::mods::register_exports();
 
     recomp::Configuration cfg{};
     cfg.argc = argc;

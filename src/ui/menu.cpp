@@ -4,8 +4,8 @@
 // and updates the menu state; RT64's present thread draws it through the
 // render hooks (ui_renderer.cpp), rebuilding the visible rows whenever the
 // state changes. Entries: Level Select (stage, then stage start or
-// checkpoint), Display (window mode and renderer options), Return to Game and
-// Exit Game.
+// checkpoint), Display (window mode and renderer options), Mods (on/off,
+// settings and restarting to apply), Return to Game and Exit Game.
 
 #include <algorithm>
 #include <atomic>
@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -28,6 +29,8 @@
 #include "ui_renderer.hpp"
 #include "level_select.hpp"
 #include "display.hpp"
+#include "app.hpp"
+#include "mods.hpp"
 #include "ultramodern/ultramodern.hpp"
 
 #include "Lato_Bold_ttf.h"
@@ -37,13 +40,14 @@
 
 namespace {
 
-enum class Screen { Main, Stages, Checkpoints, Display, ConfirmExit };
+enum class Screen { Main, Stages, Checkpoints, Display, Mods, ModSettings, ConfirmRestart, ConfirmExit };
 enum class Action { Toggle, Up, Down, Left, Right, Accept, Back };
 
 constexpr int visible_rows = 10;
-enum MainItem { MainLevelSelect, MainDisplay, MainReturn, MainExit };
-const char* const main_items[] = {"LEVEL SELECT", "DISPLAY", "RETURN TO GAME", "EXIT GAME"};
+enum MainItem { MainLevelSelect, MainDisplay, MainMods, MainReturn, MainExit };
+const char* const main_items[] = {"LEVEL SELECT", "DISPLAY", "MODS", "RETURN TO GAME", "EXIT GAME"};
 const char* const exit_items[] = {"EXIT GAME", "CANCEL"};
+const char* const restart_items[] = {"RESTART", "CANCEL"};
 
 // Display screen rows. Each option's values are its enum's values in order;
 // OFF/ON options are bools.
@@ -113,6 +117,12 @@ struct State {
     int display_sel = 0;
     int exit_sel = 1;
     winback::display::Settings display;
+    int mods_sel = 0;    // Mods, then broken mods, then Restart.
+    int option_sel = 0;  // Mod settings: 0 = on/off, then the mod's options.
+    int restart_sel = 1;
+    std::shared_ptr<const std::vector<winback::mods::Mod>> mods;
+    std::shared_ptr<const std::vector<winback::mods::BrokenMod>> broken_mods;
+    bool restart_needed = false;
     uint64_t version = 0;
 };
 
@@ -121,6 +131,7 @@ struct Effects {
     bool display = false;
     winback::display::Settings display_settings;
     bool quit = false;
+    bool restart = false;
 };
 
 std::mutex state_mutex;
@@ -133,6 +144,9 @@ int row_count(const State& s) {
         case Screen::Stages: return int(winback::levels::stages().size());
         case Screen::Checkpoints: return 1 + int(winback::levels::stages()[s.stage_sel].checkpoints.size());
         case Screen::Display: return int(std::size(display_options));
+        case Screen::Mods: return int(s.mods->size() + s.broken_mods->size()) + 1;
+        case Screen::ModSettings: return 1 + int((*s.mods)[s.mods_sel].options.size());
+        case Screen::ConfirmRestart: return int(std::size(restart_items));
         case Screen::ConfirmExit: return int(std::size(exit_items));
     }
     return 0;
@@ -143,6 +157,9 @@ int& selection(State& s) {
         case Screen::Main: return s.main_sel;
         case Screen::Stages: return s.stage_sel;
         case Screen::Display: return s.display_sel;
+        case Screen::Mods: return s.mods_sel;
+        case Screen::ModSettings: return s.option_sel;
+        case Screen::ConfirmRestart: return s.restart_sel;
         case Screen::ConfirmExit: return s.exit_sel;
         default: return s.row_sel;
     }
@@ -166,6 +183,30 @@ void change_display(State& s, int delta, Effects& fx) {
     fx.display_settings = s.display;
 }
 
+void refresh_mods(State& s) {
+    s.mods = std::make_shared<const std::vector<winback::mods::Mod>>(winback::mods::list());
+    s.broken_mods = std::make_shared<const std::vector<winback::mods::BrokenMod>>(winback::mods::broken());
+    s.restart_needed = winback::mods::restart_needed();
+}
+
+bool on_mod_row(const State& s) {
+    return s.mods_sel < int(s.mods->size());
+}
+
+// Flips the selected mod on or off, or steps the selected mod setting.
+void change_mod(State& s, int delta) {
+    const winback::mods::Mod& mod = (*s.mods)[s.mods_sel];
+    if (s.screen == Screen::Mods || s.option_sel == 0) {
+        winback::mods::set_enabled(mod.id, !mod.enabled);
+    }
+    else if (!mod.options[s.option_sel - 1].disabled) {
+        winback::mods::step_option(mod.id, mod.options[s.option_sel - 1].id, delta);
+    }
+    refresh_mods(s);
+    // A setting can hide others.
+    s.option_sel = std::min(s.option_sel, int((*s.mods)[s.mods_sel].options.size()));
+}
+
 Effects apply_locked(Action a) {
     Effects fx;
     State& s = state;
@@ -185,12 +226,17 @@ Effects apply_locked(Action a) {
         case Action::Left:
         case Action::Right:
             if (s.screen == Screen::Display) change_display(s, a == Action::Left ? -1 : 1, fx);
+            else if (s.screen == Screen::ModSettings || (s.screen == Screen::Mods && on_mod_row(s))) {
+                change_mod(s, a == Action::Left ? -1 : 1);
+            }
+            else if (s.screen == Screen::Mods) break;
             else if (a == Action::Left) sel = std::max(sel - visible_rows, 0);
             else sel = std::min(sel + visible_rows, count - 1);
             break;
         case Action::Back:
             if (s.screen == Screen::Main) set_open(s, false);
             else if (s.screen == Screen::Checkpoints) s.screen = Screen::Stages;
+            else if (s.screen == Screen::ModSettings || s.screen == Screen::ConfirmRestart) s.screen = Screen::Mods;
             else s.screen = Screen::Main;
             break;
         case Action::Accept:
@@ -201,6 +247,11 @@ Effects apply_locked(Action a) {
                         s.screen = Screen::Display;
                         s.display = winback::display::get();
                         break;
+                    case MainMods:
+                        s.screen = Screen::Mods;
+                        s.mods_sel = 0;
+                        refresh_mods(s);
+                        break;
                     case MainExit:
                         s.screen = Screen::ConfirmExit;
                         s.exit_sel = 1;
@@ -210,6 +261,23 @@ Effects apply_locked(Action a) {
             }
             else if (s.screen == Screen::Display) {
                 change_display(s, 1, fx);
+            }
+            else if (s.screen == Screen::Mods) {
+                if (on_mod_row(s)) {
+                    s.screen = Screen::ModSettings;
+                    s.option_sel = 0;
+                }
+                else if (s.mods_sel == count - 1) {
+                    s.screen = Screen::ConfirmRestart;
+                    s.restart_sel = 1;
+                }
+            }
+            else if (s.screen == Screen::ModSettings) {
+                change_mod(s, 1);
+            }
+            else if (s.screen == Screen::ConfirmRestart) {
+                if (s.restart_sel == 0) fx.restart = true;
+                else s.screen = Screen::Mods;
             }
             else if (s.screen == Screen::ConfirmExit) {
                 if (s.exit_sel == 0) fx.quit = true;
@@ -242,7 +310,11 @@ void apply(Action a) {
     }
     if (fx.quit) {
         std::printf("[menu] exit game\n");
-        ultramodern::quit();
+        winback::exit_app(false);
+    }
+    if (fx.restart) {
+        std::printf("[menu] restart\n");
+        winback::exit_app(true);
     }
 }
 
@@ -353,6 +425,11 @@ std::string plate(const std::string& text, bool selected, const std::string& tag
     return out;
 }
 
+// Text from a mod's files, safe to place in RML.
+std::string escaped(const std::string& text) {
+    return Rml::StringUtilities::EncodeRml(text);
+}
+
 void set_text(const char* id, const std::string& rml) {
     if (Rml::Element* e = ui->document->GetElementById(id)) {
         e->SetInnerRML(rml);
@@ -409,6 +486,7 @@ void rebuild(const State& s) {
         static const char* const notes[] = {
             "Jump to the start of any stage, or to one of its checkpoints.",
             "Window mode, resolution and other picture settings.",
+            "Turn mods on or off and change their settings.",
             "Close this menu.",
             "Close WinBack Recompiled.",
         };
@@ -428,6 +506,77 @@ void rebuild(const State& s) {
             "<div class=\"note\">" + opt.note + "</div>");
         hint = "<span class=\"key\">LEFT/RIGHT</span> CHANGE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
                " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";
+    }
+    else if (s.screen == Screen::Mods) {
+        int mod_count = int(s.mods->size());
+        int broken_count = int(s.broken_mods->size());
+        set_title("MODS");
+        set_text("subtitle", mod_count + broken_count == 0 ? "No mods found" : "Installed mods");
+        set_text("list", rows(mod_count + broken_count + 1, s.mods_sel, [&](int i, bool sel) {
+            if (i < mod_count) {
+                bool on = (*s.mods)[i].enabled;
+                return plate(escaped((*s.mods)[i].name), sel, on ? "ON" : "OFF", on ? "recorded" : "basic");
+            }
+            if (i < mod_count + broken_count) {
+                return plate(escaped((*s.broken_mods)[i - mod_count].name), sel, "ERROR", "basic");
+            }
+            return plate("RESTART GAME", sel, s.restart_needed ? "CHANGES WAITING" : "", "value");
+        }));
+        if (s.mods_sel < mod_count) {
+            const winback::mods::Mod& m = (*s.mods)[s.mods_sel];
+            set_text("detail", "<div class=\"head\">" + escaped(m.name) + "</div>"
+                "<div>Version " + escaped(m.version) + "</div>"
+                "<div class=\"area\">" + escaped(m.authors) + "</div>"
+                "<div class=\"note\">" + escaped(m.description) + "</div>");
+            hint = "<span class=\"key\">LEFT/RIGHT</span> ON/OFF &#160;&#160;&#160; <span class=\"key\">A</span> OPEN"
+                   " &#160;&#160;&#160; <span class=\"key\">B</span> BACK";
+        }
+        else if (s.mods_sel < mod_count + broken_count) {
+            const winback::mods::BrokenMod& b = (*s.broken_mods)[s.mods_sel - mod_count];
+            set_text("detail", "<div class=\"head\">" + escaped(b.name) + "</div>"
+                "<div class=\"note\">This mod couldn't be opened: " + escaped(b.reason) + "</div>");
+        }
+        else {
+            set_text("detail", std::string("<div class=\"head\">RESTART GAME</div><div class=\"note\">")
+                + (s.restart_needed ? "Turning mods on or off takes effect after a restart."
+                                    : "Mods added to the mods folder appear after a restart.") + "</div>");
+        }
+    }
+    else if (s.screen == Screen::ModSettings) {
+        const winback::mods::Mod& m = (*s.mods)[s.mods_sel];
+        set_title("MOD SETTINGS");
+        set_text("subtitle", escaped(m.name));
+        set_text("list", rows(1 + int(m.options.size()), s.option_sel, [&](int i, bool sel) {
+            if (i == 0) {
+                return plate("ENABLED", sel, std::string("&lt; ") + (m.enabled ? "ON" : "OFF") + " &gt;", "value");
+            }
+            const winback::mods::Option& o = m.options[i - 1];
+            bool fixed = o.disabled || o.type == winback::mods::OptionType::String;
+            return plate(escaped(o.name), sel, fixed ? escaped(o.value) : "&lt; " + escaped(o.value) + " &gt;", fixed ? "basic" : "value");
+        }));
+        if (s.option_sel == 0) {
+            set_text("detail", "<div class=\"head\">ENABLED</div><div class=\"note\">Turning a mod on or off"
+                " takes effect after a restart. Use RESTART GAME on the Mods screen.</div>");
+        }
+        else {
+            const winback::mods::Option& o = m.options[s.option_sel - 1];
+            std::string note = escaped(o.description);
+            if (o.type == winback::mods::OptionType::String) {
+                note += " Text can't be changed in this menu yet.";
+            }
+            set_text("detail", "<div class=\"head\">" + escaped(o.name) + "</div>"
+                "<div>" + escaped(o.value) + "</div><div class=\"note\">" + note + "</div>");
+        }
+        hint = "<span class=\"key\">LEFT/RIGHT</span> CHANGE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
+               " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";
+    }
+    else if (s.screen == Screen::ConfirmRestart) {
+        set_title("RESTART GAME");
+        set_text("subtitle", "Restart WinBack Recompiled?");
+        set_text("list", rows(int(std::size(restart_items)), s.restart_sel,
+            [](int i, bool sel) { return plate(restart_items[i], sel); }));
+        set_text("detail", "<div class=\"head\">RESTART GAME</div><div class=\"note\">Progress since your last"
+            " Controller Pak save is lost. Recorded checkpoints are kept.</div>");
     }
     else if (s.screen == Screen::ConfirmExit) {
         set_title("EXIT GAME");
