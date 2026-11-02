@@ -30,3 +30,12 @@ clone n64sym https://github.com/shygoo/n64sym.git ccf4600f3389f1a84bde23339225cf
 # CMake's own downloader can fail TLS on this machine, so fetch with curl.
 [ -f deps/SDL2-devel-2.30.3-VC.zip ] || curl -L -o deps/SDL2-devel-2.30.3-VC.zip \
     https://github.com/libsdl-org/SDL/releases/download/release-2.30.3/SDL2-devel-2.30.3-VC.zip
+
+# Builds mods (tools/build_mod.sh). LLVM's Windows releases have no MIPS target from 19 on.
+if [ ! -d deps/llvm-18 ]; then
+    mkdir -p deps/llvm-18
+    curl -L -o deps/llvm-18/llvm.tar.xz \
+        https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang%2Bllvm-18.1.8-x86_64-pc-windows-msvc.tar.xz
+    tar -xf deps/llvm-18/llvm.tar.xz --strip-components=1 -C deps/llvm-18
+    rm deps/llvm-18/llvm.tar.xz
+fi

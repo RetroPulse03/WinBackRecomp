@@ -1,6 +1,7 @@
 #!/bin/sh
 # Builds a mod from mods/<name> into the folder generated/mods/<name>, ready to
-# copy into game/mods. Needs LLVM (clang, ld.lld) and regen.sh's symbol file.
+# copy into game/mods. Needs LLVM 18.1.8 in deps/llvm-18 (or LLVM_BIN set to a
+# clang and ld.lld with a MIPS target) and regen.sh's symbol file.
 # Usage: sh tools/build_mod.sh mods/test-mod
 set -e
 cd "$(dirname "$0")/.."
@@ -9,7 +10,7 @@ MOD="${1:?usage: build_mod.sh mods/<name>}"
 NAME="$(basename "$MOD")"
 OUT="$PWD/generated/mods/$NAME"
 TOOL="$PWD/deps/N64Recomp/build/RecompModTool"
-LLVM="${LLVM_BIN:-/c/Program Files/LLVM/bin}"
+LLVM="${LLVM_BIN:-$PWD/deps/llvm-18/bin}"
 SYMS=generated/winback.us.syms.toml
 
 [ -f "$SYMS" ] || { echo "$SYMS is missing; run tools/regen.sh first" >&2; exit 1; }
