@@ -83,6 +83,12 @@ func = "func_8004BA40"
 before_vram = 0x8004BA40
 text = "{ extern void winback_level_frame(uint8_t*, recomp_context*, int); winback_level_frame(rdram, ctx, 1); }"
 
+# Stage init, where it chooses the player's spawn.
+[[patches.hook]]
+func = "func_8004C108"
+before_vram = 0x8004C108
+text = "{ extern void winback_level_spawn(uint8_t*); winback_level_spawn(rdram); }"
+
 # Stage init, right after the stage start snapshot (func_8009C8E0).
 [[patches.hook]]
 func = "func_8004BD7C"

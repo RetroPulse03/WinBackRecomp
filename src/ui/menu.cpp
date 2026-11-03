@@ -618,14 +618,14 @@ void rebuild(const State& s) {
         set_title("LEVEL SELECT");
         set_text("subtitle", "Choose a stage");
         set_text("list", rows(int(stages.size()), s.stage_sel, [&](int i, bool sel) {
-            return plate("STAGE " + two_digits(stages[i].number) + " &#8211; " + stages[i].area, sel);
+            return plate("STAGE " + two_digits(stages[i].number + 1) + " &#8211; " + stages[i].area, sel);
         }));
         const L::Stage& st = stages[s.stage_sel];
         int recorded = 0;
         for (const auto& cp : st.checkpoints) {
             recorded += L::is_recorded(st.number, cp) ? 1 : 0;
         }
-        set_text("detail", "<div class=\"head\">STAGE " + two_digits(st.number) + "</div>"
+        set_text("detail", "<div class=\"head\">STAGE " + two_digits(st.number + 1) + "</div>"
             "<div class=\"area\">" + st.area + "</div>"
             "<div>Checkpoints: " + std::to_string(st.checkpoints.size()) + "</div>"
             "<div>Recorded: " + std::to_string(recorded) + "</div>"
@@ -634,7 +634,7 @@ void rebuild(const State& s) {
     }
     else {
         const L::Stage& st = L::stages()[s.stage_sel];
-        set_title("STAGE " + two_digits(st.number));
+        set_title("STAGE " + two_digits(st.number + 1));
         set_text("subtitle", st.area);
         set_text("list", rows(1 + int(st.checkpoints.size()), s.row_sel, [&](int i, bool sel) {
             if (i == 0) {

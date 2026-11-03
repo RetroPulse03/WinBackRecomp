@@ -53,7 +53,8 @@ These environment variables are read at startup.
 | `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons. `r@31+14` holds R for 14 seconds. |
 | `WINBACK_DLDUMP=1` | Logs every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
 | `WINBACK_GFX_API=d3d12` | Uses Direct3D 12 instead of Vulkan. |
-| `WINBACK_JUMP=5@20,12.1@60` | Level Select jumps at the given seconds: stage 5's start at 20 s, then stage 12's first checkpoint at 60 s. |
+| `WINBACK_JUMP=5@20,12.1@60` | Level Select jumps at the given seconds: stage 5's start at 20 s, then stage 12's first checkpoint at 60 s. Stages count from 0 here and in checkpoint file names. The menu shows them from 1, as the game's own stage list does. |
+| `WINBACK_LEVELLOG=1` | Prints the stage, map, checkpoint and the player's position twice a second. |
 | `WINBACK_MENUPRESS=select@6,a@8,down@9` | Scripts recomp menu presses: `select up down left right a b`. |
 | `WINBACK_RECORD_AT=34` | Records the game's current checkpoint snapshot at that second, as if a checkpoint had triggered. |
 | `RECOMPLAUNCHER=1` | Set by RecompLauncher. The log goes to `logs/winback.log`, and a restart keeps the first process waiting so the launcher's session continues. |
@@ -181,10 +182,14 @@ The compiler must have a MIPS target. LLVM's Windows releases dropped it at vers
 **Jumps** run in the frame callback hooks on the game thread.
 
 - *Stage start:* `func_8008EF28`, keeping the difficulty and setting health to 100, then `func_8008EEAC(stage)`. From the front end the game then enters gameplay through `func_8008F29C(9)`, like New Game. During gameplay the map reload request is used instead.
-- *Recorded checkpoint:* the snapshot is copied into `D_8011DAB0` / `D_8011E350`, then `func_8008EF28` + `func_8009C998` as on the continue screen, followed by the same transition.
+- *Recorded checkpoint:* the snapshot is copied into `D_8011DAB0` / `D_8011E350`, then `func_8008EF28` + `func_8009C998` as on the continue screen, followed by the same transition. A hook at the start of `func_8004C108` then sets `D_80159A3C` for two frames if the map has a spawn numbered like the checkpoint, so the player starts there instead of at the map's spawn 0. It also clears a jump's map reload request, which would otherwise place the player like a door does.
 - *Basic checkpoint:* a stage start. When the stage init takes its start snapshot (hook after `0x8004C068`), the snapshot's checkpoint id and map are replaced with the target's, and the next gameplay frame restores it like a recorded one.
 
 **Recording.** A hook after the script checkpoint command's `func_8009C8E0` call (`0x8009BB00`) marks the checkpoint. The command still changes the saved copy afterwards, so the next frame writes `saves/checkpoints/stageSS_mapMM_cpIII.bin`: `WBCP`, then the two saved blocks in N64 byte order. Checkpoints aren't recorded during attract demos, or after a basic load until the next stage start or recorded load, because their state would be the basic one. Map entry scripts often trigger a checkpoint straight away, so this matters.
+
+### Logs
+
+Without a console, output goes to `logs/winback.log` next to the executable. Each launch moves the last log to `logs/winback.previous.log`.
 
 ### Graphics API
 

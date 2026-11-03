@@ -69,6 +69,7 @@ constexpr uint32_t saved_events = 0x8011DAB0;
 constexpr uint32_t saved_progress = 0x8011E350;
 constexpr uint32_t checkpoint_id_offset = 0x894;
 constexpr uint32_t checkpoint_map_offset = 0x895;
+constexpr uint32_t spawn_at_checkpoint_offset = 0x12DC;  // D_80159A3C in the progress block
 
 class Rom {
 public:
@@ -239,6 +240,8 @@ bool recorded_loaded = false;
 // Game thread only.
 std::optional<winback::levels::Checkpoint> basic_target;
 bool restore_next_frame = false;
+bool restoring_checkpoint = false;  // Until the stage init places the player.
+int spawn_flag_frames = 0;          // Frames left before D_80159A3C goes back to 0.
 bool record_next_frame = false;
 // Set after a basic load: checkpoints reached from it would record the basic
 // state, not one from natural play, so they aren't saved until the next stage
@@ -336,6 +339,7 @@ void restore_checkpoint(uint8_t* rdram, const recomp_context* ctx, bool gameplay
     stop_demo(rdram);
     call(rdram, ctx, func_8008EF28);
     call(rdram, ctx, func_8009C998);
+    restoring_checkpoint = true;
     enter_map(rdram, ctx, gameplay);
 }
 
@@ -383,6 +387,26 @@ void poll_scripted_jumps() {
     }
 }
 
+// WINBACK_LEVELLOG=1: prints the map and the player's position twice a second.
+void log_state(uint8_t* rdram, int gameplay) {
+    static const bool enabled = std::getenv("WINBACK_LEVELLOG") != nullptr;
+    static int frame = 0;
+    if (!enabled || ++frame % 30 != 0) {
+        return;
+    }
+    uint32_t player = read_u32(rdram, 0x801390C0);
+    float pos[3] = {};
+    if (gameplay && player >= 0x80000000 && player < 0x80800000) {
+        for (int i = 0; i < 3; i++) {
+            uint32_t bits = read_u32(rdram, player + i * 4);
+            std::memcpy(&pos[i], &bits, 4);
+        }
+    }
+    std::printf("[levels] gameplay %d stage %d map %d entrance %d checkpoint %d flags %04X events %d pos %.0f %.0f %.0f\n",
+        gameplay, ram_u8(rdram, progress_block + 1), read_u16(rdram, 0x8016A4EA), int16_t(read_u16(rdram, 0x8016A41E)),
+        ram_u8(rdram, 0x80138224), read_u16(rdram, 0x8016A41C), ram_u8(rdram, 0x8010E130), pos[0], pos[1], pos[2]);
+}
+
 } // namespace
 
 const std::vector<winback::levels::Stage>& winback::levels::stages() {
@@ -407,6 +431,11 @@ extern "C" void winback_level_frame(uint8_t* rdram, recomp_context* ctx, int gam
     // and the pause menu and other screens use other bits.
     winback_set_gameplay_input(gameplay && (read_u16(rdram, 0x8016A41C) & 1));
     poll_scripted_jumps();
+    log_state(rdram, gameplay);
+    if (spawn_flag_frames > 0 && gameplay && --spawn_flag_frames == 0) {
+        ram_u8(rdram, progress_block + spawn_at_checkpoint_offset) = 0;
+        ram_u8(rdram, saved_progress + spawn_at_checkpoint_offset) = 0;
+    }
     bool demo = read_u32(rdram, 0x801390D4) != 0;
     if (record_next_frame) {
         record_next_frame = false;
@@ -436,6 +465,7 @@ extern "C" void winback_level_frame(uint8_t* rdram, recomp_context* ctx, int gam
     const winback::levels::Stage& stage = list[jump->stage];
     basic_target.reset();
     restore_next_frame = false;
+    restoring_checkpoint = false;
     from_basic = false;
     if (jump->checkpoint >= 0 && jump->checkpoint < int(stage.checkpoints.size())) {
         const winback::levels::Checkpoint& cp = stage.checkpoints[jump->checkpoint];
@@ -451,6 +481,38 @@ extern "C" void winback_level_frame(uint8_t* rdram, recomp_context* ctx, int gam
         std::printf("[levels] starting stage %d\n", stage.number);
     }
     start_stage(rdram, ctx, gameplay != 0, stage.number);
+}
+
+// Spawn points of the loaded map: {u8 data[0x18], u8 type, u8 index, ...}, type 0
+// for the player and 1 for the camera.
+bool has_spawn(uint8_t* rdram, uint8_t index) {
+    bool found[2] = {};
+    int count = int16_t(read_u16(rdram, 0x8016A398));
+    for (int i = 0; i < count; i++) {
+        uint16_t entry = read_u16(rdram, 0x80144700 + i * 0x1C + 0x18);
+        if ((entry & 0xFF) == index && (entry >> 8) < 2) {
+            found[entry >> 8] = true;
+        }
+    }
+    return found[0] && found[1];
+}
+
+// Hook: start of func_8004C108, where the stage init chooses the player's spawn.
+// The game's own continue starts at the map's spawn 0 unless D_80159A3C is set,
+// and then it uses the spawn numbered like the checkpoint. A jump from gameplay
+// also reloads through the map change request, which would pick a door's spawn
+// and is meant for walking between maps, so it is cancelled here.
+extern "C" void winback_level_spawn(uint8_t* rdram) {
+    if (!restoring_checkpoint) {
+        return;
+    }
+    restoring_checkpoint = false;
+    write_u16(rdram, 0x8016A418, 0);
+    uint8_t id = ram_u8(rdram, 0x80138224);
+    bool found = has_spawn(rdram, id);
+    std::printf("[levels] map %d checkpoint %d: spawn %s\n", read_u16(rdram, 0x8016A4EA), id, found ? "found" : "missing, using the map's start");
+    ram_u8(rdram, progress_block + spawn_at_checkpoint_offset) = found ? 1 : 0;
+    spawn_flag_frames = found ? 2 : 0;
 }
 
 // Hook: func_8004BD7C just took the stage start snapshot (only on entry from

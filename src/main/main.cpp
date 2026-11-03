@@ -249,6 +249,8 @@ void open_log() {
     std::error_code ec;
     fs::create_directories(exe_dir() / "logs", ec);
     fs::path path = exe_dir() / "logs" / "winback.log";
+    // A restart or a second launch shouldn't cost the session it follows.
+    fs::rename(path, exe_dir() / "logs" / "winback.previous.log", ec);
     std::ofstream truncate(path);
     truncate.close();
     _wfreopen(path.c_str(), L"a", stdout);
