@@ -87,6 +87,10 @@ N64Recomp replaces libultra functions by name (`deps/N64Recomp/src/symbol_lists.
 - It also extends functions whose jump-table cases fall in a tail that splat split off. If one is missed, the build aborts with "Switch-case out of bounds".
 - A hook's `before_vram` must be inside a function listed in the symbol file, not at a label.
 
+### Graphics tasks hold the game
+
+`patches/N64ModernRuntime/0002-hold-game-while-parsing-gfx-task.patch` keeps the game thread that starts a graphics task waiting until RT64 has read that task's display list, and reports the RSP as complete only after that. WinBack draws characters directly from live memory (part matrices at `obj+0x1008`, joint vertices at `D_801CC710`) and doesn't wait for the RSP before starting its next update. Without the patch, that memory changed while about a quarter of scene tasks were being read, so one frame could mix body parts from two updates. With it, none of about 4,200 tasks changed, at the same frame rate.
+
 ### Controller layouts
 
 Controllers have a gameplay layout and a menu layout (`read_controller` in `src/main/input.cpp`). `winback_level_frame` chooses between them each frame from the game's own state: the gameplay layout applies while bit 0 of `D_8016A41C` is set in the gameplay frame callback. Don't choose the layout from anything the camera does. An earlier version used whether `func_80035970` had run recently, but only camera modes 0, 1 and 3 call it, so the buttons changed during scripted views while the player still had control, such as the first mission's security camera.

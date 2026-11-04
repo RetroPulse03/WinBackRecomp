@@ -1,0 +1,45 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+index 17d7a47..05b87d2 100644
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -139,6 +139,7 @@ static struct {
+     uint8_t* rdram;
+     moodycamel::BlockingConcurrentQueue<Action> action_queue{};
+     moodycamel::BlockingConcurrentQueue<OSTask*> sp_task_queue{};
++    moodycamel::LightweightSemaphore gfx_task_parsed{};
+     moodycamel::ConcurrentQueue<OSThread*> deleted_threads{};
+ } events_context{};
+ 
+@@ -364,11 +365,6 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+         if (events_context.action_queue.wait_dequeue_timed(action, 1ms)) {
+             // Determine the action type and act on it
+             if (const auto* task_action = std::get_if<SpTaskAction>(&action)) {
+-                // Tell the game that the RSP completed instantly. This will allow it to queue other task types, but it won't
+-                // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
+-                // is finished as well, so sending this early shouldn't be an issue in most cases.
+-                // If this causes issues then the logic can be replaced with responding to yield requests.
+-                sp_complete();
+                 ultramodern::measure_input_latency();
+ 
+                 PTR(u64) displaylist = task_action->task.t.data_ptr;
+@@ -378,6 +374,9 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 renderer_context->send_dl(&task_action->task);
+                 [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
+ 
++                // The renderer has now read the task's inputs, so the game can run again and the RSP can complete.
++                events_context.gfx_task_parsed.signal();
++                sp_complete();
+                 dp_complete();
+                 // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
+                 ultramodern::extensions::on_displaylist_parsed(displaylist);
+@@ -568,6 +567,10 @@ void ultramodern::submit_rsp_task(RDRAM_ARG PTR(OSTask) task_) {
+     // Send gfx tasks to the graphics action queue
+     if (task->t.type == M_GFXTASK) {
+         events_context.action_queue.enqueue(SpTaskAction{ *task });
++        // Game threads run one at a time, so holding this one here keeps the game from changing the task's inputs
++        // while the renderer reads them. Games don't always preserve them: WinBack draws characters directly from
++        // their live matrices and vertices, and it starts its next update while the task is being read.
++        events_context.gfx_task_parsed.wait();
+     }
+     // Set all other tasks as the RSP task
+     else {
