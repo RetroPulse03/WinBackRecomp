@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -16,6 +17,7 @@
 #include "librecomp/mods.hpp"
 #include "librecomp/overlays.hpp"
 
+#include "input.hpp"
 #include "mods.hpp"
 
 namespace fs = std::filesystem;
@@ -173,6 +175,41 @@ void winback_mod_log(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
     std::printf("[mod %s] %s\n", recomp::mods::get_mod_id(mod_index).c_str(), _arg_string<0>(rdram, ctx).c_str());
 }
 
+// u32 winback_mod_time_us(void): a steady clock in microseconds.
+void winback_mod_time_us(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
+    static const auto start = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    _return<u32>(ctx, u32(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()));
+}
+
+// void winback_mod_pad_read(s32 controller, WinbackPad* pad)
+void winback_mod_pad_read(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
+    winback::input::RawPad raw = winback::input::read_raw(int(ctx->r4));
+    gpr pad = ctx->r5;
+    auto bits = [](float f) {
+        s32 out;
+        std::memcpy(&out, &f, sizeof(out));
+        return out;
+    };
+    MEM_W(0x00, pad) = s32(raw.pad_buttons);
+    MEM_W(0x04, pad) = s32(raw.other_buttons);
+    MEM_W(0x08, pad) = bits(raw.left_x);
+    MEM_W(0x0C, pad) = bits(raw.left_y);
+    MEM_W(0x10, pad) = bits(raw.right_x);
+    MEM_W(0x14, pad) = bits(raw.right_y);
+}
+
+// void winback_mod_pad_set(s32 controller, u32 buttons, f32 x, f32 y)
+void winback_mod_pad_set(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
+    auto as_float = [](gpr reg) {
+        s32 raw = s32(reg);
+        float out;
+        std::memcpy(&out, &raw, sizeof(out));
+        return out;
+    };
+    winback::input::set_mod_pad(int(ctx->r4), uint16_t(ctx->r5), as_float(ctx->r6), as_float(ctx->r7));
+}
+
 void write_mods_json() {
     fs::path path = recomp::get_config_path() / "mods.json";
     nlohmann::json j = nlohmann::json::object();
@@ -224,6 +261,9 @@ void winback::mods::register_exports() {
     recomp::overlays::register_ext_base_export("winback_mod_file_size", winback_mod_file_size);
     recomp::overlays::register_ext_base_export("winback_mod_read_file", winback_mod_read_file);
     recomp::overlays::register_ext_base_export("winback_mod_log", winback_mod_log);
+    recomp::overlays::register_ext_base_export("winback_mod_time_us", winback_mod_time_us);
+    recomp::overlays::register_ext_base_export("winback_mod_pad_read", winback_mod_pad_read);
+    recomp::overlays::register_ext_base_export("winback_mod_pad_set", winback_mod_pad_set);
 }
 
 std::vector<winback::mods::Mod> winback::mods::list() {

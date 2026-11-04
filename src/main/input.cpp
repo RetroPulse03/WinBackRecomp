@@ -36,12 +36,28 @@ struct PadState {
     // Right stick X, and the C-Left/C-Right it presses for code that only
     // reads buttons. The player camera reads the stick itself.
     float cam_x = 0.0f;
+    float cam_y = 0.0f;
     uint16_t cam_buttons = 0;
+    // For mods: the controller's own buttons (SDL button bits and these two for
+    // the triggers), and the N64 buttons pressed by the keyboard or a script.
+    uint32_t pad_buttons = 0;
+    uint16_t other_buttons = 0;
+};
+
+constexpr uint32_t PAD_LT = 1u << 30, PAD_RT = 1u << 31;
+
+// A mod's layout: what the game reads during normal play once a mod has set it.
+struct ModPad {
+    bool active = false;
+    uint16_t buttons = 0;
+    float x = 0.0f;
+    float y = 0.0f;
 };
 
 std::mutex state_mutex;
 std::array<PadState, max_players> pads{};
 std::array<SDL_GameController*, max_players> controllers{};
+std::array<ModPad, max_players> mod_pads{};
 
 float axis(SDL_GameController* c, SDL_GameControllerAxis a) {
     float v = SDL_GameControllerGetAxis(c, a) / 32767.0f;
@@ -66,13 +82,23 @@ bool in_gameplay() {
     return gameplay_input.load(std::memory_order_relaxed);
 }
 
+// Controller buttons pressed by WINBACK_AUTOPRESS.
+uint32_t scripted_pad = 0;
+bool scripted_pad_used = false;
+
 // Classic scheme: the PS2 release's default layout. Menus always confirm
 // with A and go back with B.
 PadState read_controller(SDL_GameController* c, int player) {
     PadState s{};
     auto btn = [&](SDL_GameControllerButton b, uint16_t mask) {
-        if (SDL_GameControllerGetButton(c, b)) s.buttons |= mask;
+        if (SDL_GameControllerGetButton(c, b) || (scripted_pad & (1u << b))) s.buttons |= mask;
     };
+    for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++) {
+        if (SDL_GameControllerGetButton(c, SDL_GameControllerButton(b))) s.pad_buttons |= 1u << b;
+    }
+    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0.5f) s.pad_buttons |= PAD_LT;
+    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0.5f) s.pad_buttons |= PAD_RT;
+    s.pad_buttons |= scripted_pad;
     if (in_gameplay()) {
         btn(SDL_CONTROLLER_BUTTON_X, BTN_A);
         btn(SDL_CONTROLLER_BUTTON_A, BTN_B);
@@ -90,9 +116,10 @@ PadState read_controller(SDL_GameController* c, int player) {
     btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN, BTN_DD);
     btn(SDL_CONTROLLER_BUTTON_DPAD_LEFT, BTN_DL);
     btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, BTN_DR);
-    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0.5f) s.buttons |= BTN_CL;
-    if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0.5f) s.buttons |= BTN_CR;
+    if (s.pad_buttons & PAD_LT) s.buttons |= BTN_CL;
+    if (s.pad_buttons & PAD_RT) s.buttons |= BTN_CR;
     s.cam_x = axis(c, SDL_CONTROLLER_AXIS_RIGHTX);
+    s.cam_y = -axis(c, SDL_CONTROLLER_AXIS_RIGHTY);
     if (s.cam_x > 0.5f) s.cam_buttons |= BTN_CR;
     if (s.cam_x < -0.5f) s.cam_buttons |= BTN_CL;
     bool rsc = SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
@@ -135,11 +162,18 @@ PadState read_keyboard() {
 // WINBACK_AUTOPRESS=button@seconds[,button@seconds...]: scripted player 1
 // presses for unattended tests, e.g. "start@10,a@13,a@15". Each press is held
 // for 150 ms, or for the given seconds with button@seconds+hold (e.g. "r@32+10").
-// Buttons: a b z start l r du dd dl dr cu cd cl cr.
+// Buttons: a b z start l r du dd dl dr cu cd cl cr, the left stick su sd sl sr
+// and the right stick ru rd rl rr (held fully over). The controller's own
+// buttons, which go through the current layout: pad_a pad_b pad_x pad_y pad_lb
+// pad_rb pad_lt pad_rt pad_dl pad_dr pad_dd pad_start.
+enum AutoStick : uint16_t { AUTO_SU = 1, AUTO_SD, AUTO_SL, AUTO_SR, AUTO_RU, AUTO_RD, AUTO_RL, AUTO_RR };
+
 struct AutoPress {
     uint16_t mask;
+    uint16_t stick;
     double at;
     double hold;
+    uint32_t pad = 0;
 };
 
 std::vector<AutoPress> load_autopress() {
@@ -153,6 +187,18 @@ std::vector<AutoPress> load_autopress() {
         {"du", BTN_DU}, {"dd", BTN_DD}, {"dl", BTN_DL}, {"dr", BTN_DR},
         {"cu", BTN_CU}, {"cd", BTN_CD}, {"cl", BTN_CL}, {"cr", BTN_CR},
     };
+    static const std::pair<const char*, AutoStick> stick_names[] = {
+        {"su", AUTO_SU}, {"sd", AUTO_SD}, {"sl", AUTO_SL}, {"sr", AUTO_SR},
+        {"ru", AUTO_RU}, {"rd", AUTO_RD}, {"rl", AUTO_RL}, {"rr", AUTO_RR},
+    };
+    static const std::pair<const char*, uint32_t> pad_names[] = {
+        {"pad_a", 1u << SDL_CONTROLLER_BUTTON_A}, {"pad_b", 1u << SDL_CONTROLLER_BUTTON_B},
+        {"pad_x", 1u << SDL_CONTROLLER_BUTTON_X}, {"pad_y", 1u << SDL_CONTROLLER_BUTTON_Y},
+        {"pad_lb", 1u << SDL_CONTROLLER_BUTTON_LEFTSHOULDER}, {"pad_rb", 1u << SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
+        {"pad_dl", 1u << SDL_CONTROLLER_BUTTON_DPAD_LEFT}, {"pad_dr", 1u << SDL_CONTROLLER_BUTTON_DPAD_RIGHT},
+        {"pad_dd", 1u << SDL_CONTROLLER_BUTTON_DPAD_DOWN}, {"pad_start", 1u << SDL_CONTROLLER_BUTTON_START},
+        {"pad_lt", PAD_LT}, {"pad_rt", PAD_RT},
+    };
     std::string spec = env;
     size_t pos = 0;
     while (pos < spec.size()) {
@@ -161,11 +207,23 @@ std::vector<AutoPress> load_autopress() {
         size_t at = item.find('@');
         if (at != std::string::npos) {
             std::string name = item.substr(0, at);
+            size_t plus = item.find('+', at);
+            double hold = plus == std::string::npos ? 0.15 : std::atof(item.c_str() + plus + 1);
+            double when = std::atof(item.c_str() + at + 1);
             for (const auto& [n, mask] : names) {
                 if (name == n) {
-                    size_t plus = item.find('+', at);
-                    double hold = plus == std::string::npos ? 0.15 : std::atof(item.c_str() + plus + 1);
-                    out.push_back({mask, std::atof(item.c_str() + at + 1), hold});
+                    out.push_back({mask, 0, when, hold});
+                }
+            }
+            for (const auto& [n, stick] : stick_names) {
+                if (name == n) {
+                    out.push_back({0, stick, when, hold});
+                }
+            }
+            for (const auto& [n, pad] : pad_names) {
+                if (name == n) {
+                    out.push_back({0, 0, when, hold, pad});
+                    scripted_pad_used = true;
                 }
             }
         }
@@ -177,20 +235,31 @@ std::vector<AutoPress> load_autopress() {
     return out;
 }
 
-uint16_t autopress_buttons() {
+void apply_autopress(PadState& s) {
     static const std::vector<AutoPress> presses = load_autopress();
     static const auto start = std::chrono::steady_clock::now();
+    scripted_pad = 0;
     if (presses.empty()) {
-        return 0;
+        return;
     }
     double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    uint16_t buttons = 0;
     for (const AutoPress& p : presses) {
         if (t >= p.at && t < p.at + p.hold) {
-            buttons |= p.mask;
+            s.buttons |= p.mask;
+            scripted_pad |= p.pad;
+            switch (p.stick) {
+                case AUTO_SU: s.y = 1.0f; break;
+                case AUTO_SD: s.y = -1.0f; break;
+                case AUTO_SL: s.x = -1.0f; break;
+                case AUTO_SR: s.x = 1.0f; break;
+                case AUTO_RU: s.cam_y = 1.0f; break;
+                case AUTO_RD: s.cam_y = -1.0f; break;
+                case AUTO_RL: s.cam_x = -1.0f; break;
+                case AUTO_RR: s.cam_x = 1.0f; break;
+                default: break;
+            }
         }
     }
-    return buttons;
 }
 
 } // namespace
@@ -217,7 +286,9 @@ extern "C" int winback_take_rear_snap(int controller_num) {
     if (controller_num < 0 || controller_num >= max_players) {
         return 0;
     }
-    return rear_snap_pending[controller_num].exchange(false);
+    bool pressed = rear_snap_pending[controller_num].exchange(false);
+    std::lock_guard lock{state_mutex};
+    return pressed && !mod_pads[controller_num].active;
 }
 
 void winback::input::handle_event(const SDL_Event& ev) {
@@ -246,16 +317,21 @@ void winback::input::handle_event(const SDL_Event& ev) {
 void winback::input::poll() {
     std::array<PadState, max_players> next{};
     next[0] = read_keyboard();
-    next[0].buttons |= autopress_buttons();
+    apply_autopress(next[0]);
+    next[0].other_buttons = next[0].buttons;
     for (int i = 0; i < max_players; i++) {
-        if (controllers[i] == nullptr) {
+        if (controllers[i] == nullptr && (i != 0 || !scripted_pad_used)) {
             continue;
         }
         PadState c = read_controller(controllers[i], i);
         next[i].buttons |= c.buttons;
         next[i].cam_buttons |= c.cam_buttons;
+        next[i].pad_buttons |= c.pad_buttons;
         if (std::fabs(c.cam_x) > std::fabs(next[i].cam_x)) {
             next[i].cam_x = c.cam_x;
+        }
+        if (std::fabs(c.cam_y) > std::fabs(next[i].cam_y)) {
+            next[i].cam_y = c.cam_y;
         }
         if (std::fabs(c.x) + std::fabs(c.y) > std::fabs(next[i].x) + std::fabs(next[i].y)) {
             next[i].x = c.x;
@@ -271,7 +347,8 @@ void winback::input::poll() {
     if (menu_guard) {
         bool idle = true;
         for (const PadState& p : next) {
-            idle &= p.buttons == 0 && p.cam_buttons == 0 && p.x == 0.0f && p.y == 0.0f && p.cam_x == 0.0f;
+            idle &= p.buttons == 0 && p.cam_buttons == 0 && p.pad_buttons == 0 && p.x == 0.0f && p.y == 0.0f
+                && p.cam_x == 0.0f && p.cam_y == 0.0f;
         }
         menu_guard = winback::menu::is_open() || !idle;
         next = {};
@@ -288,7 +365,28 @@ bool winback::input::get(int controller_num, uint16_t* buttons, float* x, float*
     *buttons = pads[controller_num].buttons | pads[controller_num].cam_buttons;
     *x = pads[controller_num].x;
     *y = pads[controller_num].y;
+    if (mod_pads[controller_num].active && in_gameplay()) {
+        *buttons = mod_pads[controller_num].buttons;
+        *x = mod_pads[controller_num].x;
+        *y = mod_pads[controller_num].y;
+    }
     return true;
+}
+
+winback::input::RawPad winback::input::read_raw(int controller_num) {
+    if (controller_num < 0 || controller_num >= max_players) {
+        return {};
+    }
+    std::lock_guard lock{state_mutex};
+    const PadState& p = pads[controller_num];
+    return {p.pad_buttons, p.other_buttons, p.x, p.y, p.cam_x, p.cam_y};
+}
+
+void winback::input::set_mod_pad(int controller_num, uint16_t buttons, float x, float y) {
+    if (controller_num >= 0 && controller_num < max_players) {
+        std::lock_guard lock{state_mutex};
+        mod_pads[controller_num] = {true, buttons, x, y};
+    }
 }
 
 void winback::input::set_rumble(int controller_num, bool rumble) {

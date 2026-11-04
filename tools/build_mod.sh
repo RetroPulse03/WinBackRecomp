@@ -29,7 +29,8 @@ for src in "$MOD"/src/*.c; do
     "$LLVM/clang.exe" $CFLAGS -c "$src" -o "$obj"
     OBJS="$OBJS $obj"
 done
-"$LLVM/ld.lld.exe" --nostdlib --emit-relocs -T "$MOD/mod.ld" -o "$MOD/build/mod.elf" $OBJS
+# The mod tool resolves game functions from the symbol file.
+"$LLVM/ld.lld.exe" --nostdlib --emit-relocs --unresolved-symbols=ignore-all -T "$MOD/mod.ld" -o "$MOD/build/mod.elf" $OBJS
 
 "$TOOL" "$MOD/mod.toml" "$OUT"
 

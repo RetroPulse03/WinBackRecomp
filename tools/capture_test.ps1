@@ -16,6 +16,8 @@ public static class Win {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 }
 "@
@@ -32,6 +34,8 @@ for ($i = 1; $i -le $Shots; $i++) {
     $proc.Refresh()
     $h = $proc.MainWindowHandle
     if ($h -eq [IntPtr]::Zero) { Write-Output "no window yet"; continue }
+    # A minimized window has no image. 4 is SW_SHOWNOACTIVATE, which leaves the focus alone.
+    if ([Win]::IsIconic($h)) { [Win]::ShowWindow($h, 4) | Out-Null; Start-Sleep -Milliseconds 300 }
     # Ask the window for its own image, so other windows on screen can't end up in the shot.
     $r = New-Object Win+RECT
     [Win]::GetClientRect($h, [ref]$r) | Out-Null

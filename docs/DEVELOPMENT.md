@@ -50,7 +50,7 @@ These environment variables are read at startup.
 |---|---|
 | `WINBACK_DEBUG=1` | Prints per-second task counts and, every 5 seconds, OSThread states (plus call traces when `trace_mode` is on). Opens a console. |
 | `WINBACK_WATCH=8011xxxx,...` | Adds memory words to the periodic dump. |
-| `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons. `r@31+14` holds R for 14 seconds. |
+| `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons and sticks. `r@31+14` holds R for 14 seconds. `su sd sl sr` and `ru rd rl rr` push the left and right sticks fully over. `pad_a pad_b pad_x pad_y pad_lb pad_rb pad_lt pad_rt pad_dl pad_dr pad_dd pad_start` press the controller's own buttons, which go through the current layout. |
 | `WINBACK_DLDUMP=1` | Logs every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
 | `WINBACK_GFX_API=d3d12` | Uses Direct3D 12 instead of Vulkan. |
 | `WINBACK_JUMP=5@20,12.1@60` | Level Select jumps at the given seconds: stage 5's start at 20 s, then stage 12's first checkpoint at 60 s. Stages count from 0 here and in checkpoint file names. The menu shows them from 1, as the game's own stage list does. |
@@ -163,7 +163,9 @@ Mods are named folders (or single `.nrm` files, which are zips of the same files
 - **Settings apply live.** The menu calls `set_mod_config_value`, and a mod reads the value with `recomp_get_config_u32` and friends. The runtime saves once options have been quiet for a second, so `mods::finish` waits for that before exiting. Text options are shown but can't be edited yet.
 - **Broken mods:** a mod that can't be opened is listed with the reason (`patches/N64ModernRuntime/0001-keep-mod-errors.patch` keeps the errors, which the runtime only printed). A mod that fails to load would leave the game stuck, so after the runtime's message `main.cpp` turns off the failed mods and restarts.
 
-Functions WinBack gives mods are in `mods/include/winback_mod.h`: `winback_mod_file_size` and `winback_mod_read_file` read files from the mod's own folder or `.nrm`, and `winback_mod_log` prints to the log.
+Functions WinBack gives mods are in `mods/include/winback_mod.h`: `winback_mod_file_size` and `winback_mod_read_file` read files from the mod's own folder or `.nrm`, and `winback_mod_log` prints to the log. `winback_mod_time_us` is a clock. `winback_mod_pad_read` gives a controller as it is held, and `winback_mod_pad_set` replaces what the game reads from it during normal play, so a mod can have its own button layout.
+
+A mod can't hook a function that has a `[[patches.hook]]` in `config/winback.us.toml`. To hook a function, the runtime rebuilds it from the ROM (`regenerated` in librecomp's `mods.cpp`), which drops the recomp's own hooks in it. A mod that hooked `func_8004BA40` stopped `winback_level_frame` running, and the game kept the menu buttons during play.
 
 To build a mod from `mods/<name>/`:
 
@@ -228,7 +230,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** controls (Classic/Modern, remapping), the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; widescreen is hidden until it is worked on.
+3. **Settings:** remapping, the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; widescreen is hidden until it is worked on.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
 5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, widescreen, split-screen and custom characters.
 6. **Linux build.**
