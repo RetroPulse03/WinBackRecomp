@@ -57,15 +57,13 @@ float axis(SDL_GameController* c, SDL_GameControllerAxis a) {
 std::array<bool, max_players> rear_snap_held{};
 std::array<std::atomic<bool>, max_players> rear_snap_pending{};
 
-// Time of the last frame the game updated the player camera (see the hook on
-// func_80035970 in config/winback.us.toml). Shortly after that stops, the
-// game is in a menu or paused.
-std::atomic<int64_t> last_player_control_ns{0};
+// Whether the game is in normal play rather than a menu, set by the game thread
+// each frame from the game's own state (winback_level_frame). Controllers use
+// the gameplay layout during all of normal play, whatever the camera is doing.
+std::atomic<bool> gameplay_input{false};
 
 bool in_gameplay() {
-    using namespace std::chrono_literals;
-    auto now = std::chrono::steady_clock::now().time_since_epoch();
-    return now - std::chrono::nanoseconds(last_player_control_ns.load(std::memory_order_relaxed)) < 100ms;
+    return gameplay_input.load(std::memory_order_relaxed);
 }
 
 // Classic scheme: the PS2 release's default layout. Menus always confirm
@@ -197,11 +195,9 @@ uint16_t autopress_buttons() {
 
 } // namespace
 
-// Called by the game thread at the start of the player camera update.
-extern "C" void winback_camera_frame(void) {
-    last_player_control_ns.store(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(),
-        std::memory_order_relaxed);
+// Called by the game thread each frame.
+extern "C" void winback_set_gameplay_input(int active) {
+    gameplay_input.store(active != 0, std::memory_order_relaxed);
 }
 
 // Called by the game thread's camera update: the right stick's X position for

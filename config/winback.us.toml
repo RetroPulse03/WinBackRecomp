@@ -41,14 +41,6 @@ text = "{ extern uint32_t winback_ai_get_status(void); ctx->r2 = winback_ai_get_
 
 # --- Input -----------------------------------------------------------------
 
-# Player camera update. It runs every frame of gameplay and stops in menus and
-# the pause screen, so the input layer uses it to switch the face buttons
-# between the gameplay layout and menu confirm/back.
-[[patches.hook]]
-func = "func_80035970"
-before_vram = 0x80035970
-text = "{ extern void winback_camera_frame(void); winback_camera_frame(); }"
-
 # Right stick click: snap the camera behind the player. The game does this when
 # C-Left/C-Right is pressed twice within 5 frames, by setting flag 0x200 in the
 # camera's flags (camera+0x132) unless it is already set or the player's

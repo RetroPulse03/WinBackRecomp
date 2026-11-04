@@ -42,6 +42,8 @@
 
 #include "level_select.hpp"
 
+extern "C" void winback_set_gameplay_input(int active);
+
 namespace fs = std::filesystem;
 
 namespace {
@@ -401,6 +403,9 @@ void winback::levels::request_jump(int stage, int checkpoint) {
 
 // Hook: start of the front end (gameplay = 0) or gameplay (1) frame callback.
 extern "C" void winback_level_frame(uint8_t* rdram, recomp_context* ctx, int gameplay) {
+    // D_8016A41C's low byte chooses which objects update: bit 0 is normal play,
+    // and the pause menu and other screens use other bits.
+    winback_set_gameplay_input(gameplay && (read_u16(rdram, 0x8016A41C) & 1));
     poll_scripted_jumps();
     bool demo = read_u32(rdram, 0x801390D4) != 0;
     if (record_next_frame) {
