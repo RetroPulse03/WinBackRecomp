@@ -9,6 +9,7 @@ Static recompilation of *WinBack: Covert Operations* (N64, USA) to a native PC e
 - Never commit the ROM or anything derived from it.
 - Fix rendering bugs in the graphics emulation, never by patching game code.
 - Keep `deps/` in sync with `patches/`.
+- There is one version: `main`. All recomp work is built, tested, committed, pushed and released from it, with no other branches. Work that isn't part of the recomp yet is a mod in `mods/`.
 - Never commit mods, including test mods. They are not part of the recomp. Only the interface in `mods/include/` belongs here.
 - Record what is learned about the game in [WinBack Data](https://github.com/RetroPulse03/WinBackData), along with tools that read its data, as part of the work rather than afterwards. Mark what is inferred and hasn't been confirmed. `docs/DEVELOPMENT.md` keeps what is needed to work on the recomp itself.
 - Write files with UTF-8 encoding. Edit C string literals that contain escape sequences directly rather than through scripts.
