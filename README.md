@@ -46,7 +46,7 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 | Enter | Start |
 | Esc | Recomp menu |
 
-**Controller** (Classic layout, as in the PlayStation 2 release):
+**Controller** (PS2 Style, the default layout, as in the PlayStation 2 release; other layouts are in the recomp menu's **Controls**):
 
 | Control | Action | N64 |
 |---|---|---|
@@ -71,8 +71,8 @@ Press Select (or Esc) at any time to open the recomp menu over the game; press i
 
 **Level Select** lists stages 00 to 30 with their area. Choose a stage, then its **Stage start** or one of its checkpoints, and the game jumps there from wherever you are, including the title screen.
 
-- A checkpoint becomes **RECORDED** the first time you reach it in normal play. The game's own checkpoint data is saved to `saves/checkpoints/`, and the menu loads exactly that state from then on.
-- Until then it is **BASIC**: a fresh start of the stage with you placed at the checkpoint. Items, opened doors and other progress from earlier in the stage are missing, so some areas can behave differently than in normal play. Checkpoints reached after a BASIC load aren't recorded.
+- A checkpoint becomes **Recorded** the first time you reach it in normal play. The game's own checkpoint data is saved to `saves/checkpoints/`, and the menu loads exactly that state from then on.
+- Until then it is **Basic**: a fresh start of the stage with you placed at the checkpoint. Items, opened doors and other progress from earlier in the stage are missing, so some areas can behave differently than in normal play. Checkpoints reached after a Basic load aren't recorded.
 - **Stage start** begins the stage as the game does, with its opening scene, full health and starting equipment.
 
 **Display** holds the picture settings. Change a setting with left and right; it applies straight away and is saved to `settings.json` next to the executable.
@@ -82,6 +82,12 @@ Press Select (or Esc) at any time to open the recomp menu over the game; press i
 - **Crop overscan:** WinBack leaves a black border around its picture, which TVs of the time hid past the edge of the screen. On cuts the border off so the picture fills more of the window.
 - **Integer scale:** On enlarges the picture only in whole steps, so every game pixel is the same size. The rest of the window stays black.
 - **Anti-aliasing:** off, or 2x (default), 4x or 8x MSAA.
+
+**Controls** chooses the controller layout. Changes apply straight away and are saved to `settings.json`.
+
+- **PS2 Style** (default): the layout above. In menus A confirms and B goes back.
+- **N64 Style**: the N64 controller's buttons where they sit on the pad, the same in menus as in play: A is A, X is B, B is C-Down, Y is C-Left, LB is L, RB and RT are R, LT is Z, and the right stick presses the C buttons.
+- **Custom**: choose what each controller button presses, whether the right stick turns the camera or presses the C buttons, and whether the game's menus confirm with A and go back with B. A new custom layout starts as PS2 Style, and it can be reset to either preset.
 
 **Exit Game** closes the program after a confirmation. Progress since your last Controller Pak save is lost.
 

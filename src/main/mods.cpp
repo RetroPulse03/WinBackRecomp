@@ -54,7 +54,7 @@ std::string option_text(const config::ConfigOption& opt, const config::ConfigVal
         case config::ConfigOptionType::Number:
             return number_text(std::get<config::ConfigOptionNumber>(opt.variant), std::get<double>(value));
         case config::ConfigOptionType::Bool:
-            return std::get<bool>(value) ? "ON" : "OFF";
+            return std::get<bool>(value) ? "On" : "Off";
         case config::ConfigOptionType::String:
             return std::get<std::string>(value);
         default:

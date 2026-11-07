@@ -94,7 +94,9 @@ N64Recomp replaces libultra functions by name (`deps/N64Recomp/src/symbol_lists.
 
 ### Controller layouts
 
-Controllers have a gameplay layout and a menu layout (`read_controller` in `src/main/input.cpp`). `winback_level_frame` chooses between them each frame from the game's own state: the gameplay layout applies while bit 0 of `D_8016A41C` is set in the gameplay frame callback. Don't choose the layout from anything the camera does. An earlier version used whether `func_80035970` had run recently, but only camera modes 0, 1 and 3 call it, so the buttons changed during scripted views while the player still had control, such as the first mission's security camera.
+A layout (`winback::input::Layout`) says what each controller button presses, what the right stick does (analog camera or the four C buttons) and whether the game's menus fix A and B to confirm and back. The presets are PS2 Style (the default), N64 Style (the recomp's first layout, from before the PS2 one) and Custom, chosen in the menu's Controls screen and saved to `settings.json` as `controls` and `custom_controls`. `src/main/settings_file.hpp` updates only the keys its caller owns, so the Display and Controls screens keep each other's settings. The keyboard isn't part of the layout. Mods read the right stick as held (`RawPad`), whatever the layout does with it.
+
+With A and B fixed in menus, controllers have a gameplay layout and a menu layout (`read_controller` in `src/main/input.cpp`). `winback_level_frame` chooses between them each frame from the game's own state: the gameplay layout applies while bit 0 of `D_8016A41C` is set in the gameplay frame callback. Don't choose the layout from anything the camera does. An earlier version used whether `func_80035970` had run recently, but only camera modes 0, 1 and 3 call it, so the buttons changed during scripted views while the player still had control, such as the first mission's security camera.
 
 ### Audio microcode
 
@@ -145,7 +147,7 @@ RT64's frame interpolation is off (`RefreshRate::Original` in `display.cpp`). It
 - `src/ui/ui_renderer.cpp` is the RmlUi render interface on RT64's RHI, adapted from Zelda64Recomp's. It uses RmlUi's compatibility interface with generated textures only. RmlUi's vertex colours are premultiplied but its font textures aren't, so the pixel shader premultiplies the texture and blending is `ONE / INV_SRC_ALPHA`.
 - `src/ui/menu.rml` holds the layout and style. It is compiled into the executable with the Lato fonts (`file_to_c`), so the release needs no extra files. Sizes are in `dp`, where 1080 dp is the window height. The look imitates the game's pause screen. Reading the game's own plate textures and fonts from the ROM at run time is a later step.
 - The visible rows are rebuilt as RML whenever the state changes. Only 10 rows are shown at a time.
-- Entries: Level Select, Display, Mods, Return to Game and Exit Game. Exit Game asks for confirmation, then calls `winback::exit_app` as closing the window does. Display changes and quitting run on the window thread after the menu's lock is released.
+- Entries: Level Select, Display, Controls, Mods, Return to Game and Exit Game. Exit Game asks for confirmation, then calls `winback::exit_app` as closing the window does. Display and Controls changes and quitting run on the window thread after the menu's lock is released.
 - `exit_app` (`main.cpp`) ends the process directly. The runtime's own shutdown frees game memory while the game's threads still run, which crashed on exit.
 
 ### Display settings
@@ -246,7 +248,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** remapping, the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; Widescreen widens the 3D and the game's view test and anchors the HUD to the edges, with cutscenes still to do.
+3. **Settings:** the graphics API and audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) and Controls (controller presets and custom buttons) are done; Widescreen widens the 3D and the game's view test and anchors the HUD to the edges, with cutscenes still to do.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
 5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, widescreen, split-screen and custom characters.
 6. **Linux build.**

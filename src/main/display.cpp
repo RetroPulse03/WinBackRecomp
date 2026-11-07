@@ -9,8 +9,6 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
-#include <filesystem>
-#include <fstream>
 #include <mutex>
 
 #include <json/json.hpp>
@@ -20,6 +18,7 @@
 
 #include "sdl_include.hpp"
 #include "display.hpp"
+#include "settings_file.hpp"
 #include "rt64_context.hpp"
 
 namespace R = ultramodern::renderer;
@@ -43,10 +42,6 @@ WindowMode last_fullscreen = WindowMode::Borderless;
 bool forced_fullscreen = false;
 SDL_Window* window = nullptr;
 
-std::filesystem::path settings_path() {
-    return recomp::get_config_path() / "settings.json";
-}
-
 void save(const Settings& s) {
     nlohmann::json j;
     j["window_mode"] = s.window_mode;
@@ -55,13 +50,7 @@ void save(const Settings& s) {
     j["widescreen"] = s.widescreen;
     j["crop_overscan"] = s.crop_overscan;
     j["integer_scale"] = s.integer_scale;
-    std::ofstream out(settings_path());
-    if (out) {
-        out << j.dump(4) << '\n';
-    }
-    else {
-        std::fprintf(stderr, "[display] can't write %s\n", settings_path().string().c_str());
-    }
+    winback::settings_file::update(j);
 }
 
 void apply_window_mode(WindowMode mode) {
@@ -125,20 +114,17 @@ extern "C" float winback_view_test_k(float k, double half_fov, int widened) {
 
 void load(bool developer, bool force_fullscreen) {
     Settings s;
-    std::ifstream in(settings_path());
-    if (in) {
-        try {
-            nlohmann::json j = nlohmann::json::parse(in);
-            s.window_mode = j.value("window_mode", s.window_mode);
-            s.resolution = j.value("resolution", s.resolution);
-            s.antialiasing = j.value("antialiasing", s.antialiasing);
-            s.widescreen = j.value("widescreen", s.widescreen);
-            s.crop_overscan = j.value("crop_overscan", s.crop_overscan);
-            s.integer_scale = j.value("integer_scale", s.integer_scale);
-        }
-        catch (const nlohmann::json::exception& e) {
-            std::fprintf(stderr, "[display] ignoring settings.json: %s\n", e.what());
-        }
+    nlohmann::json j = winback::settings_file::read();
+    try {
+        s.window_mode = j.value("window_mode", s.window_mode);
+        s.resolution = j.value("resolution", s.resolution);
+        s.antialiasing = j.value("antialiasing", s.antialiasing);
+        s.widescreen = j.value("widescreen", s.widescreen);
+        s.crop_overscan = j.value("crop_overscan", s.crop_overscan);
+        s.integer_scale = j.value("integer_scale", s.integer_scale);
+    }
+    catch (const nlohmann::json::exception& e) {
+        std::fprintf(stderr, "[display] ignoring settings.json: %s\n", e.what());
     }
     forced_fullscreen = force_fullscreen && s.window_mode == WindowMode::Windowed;
     {

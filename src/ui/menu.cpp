@@ -4,8 +4,9 @@
 // and updates the menu state; RT64's present thread draws it through the
 // render hooks (ui_renderer.cpp), rebuilding the visible rows whenever the
 // state changes. Entries: Level Select (stage, then stage start or
-// checkpoint), Display (window mode and renderer options), Mods (on/off,
-// settings and restarting to apply), Return to Game and Exit Game.
+// checkpoint), Display (window mode and renderer options), Controls
+// (controller layout), Mods (on/off, settings and restarting to apply),
+// Return to Game and Exit Game.
 
 #include <algorithm>
 #include <atomic>
@@ -13,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -29,6 +31,7 @@
 #include "ui_renderer.hpp"
 #include "level_select.hpp"
 #include "display.hpp"
+#include "input.hpp"
 #include "app.hpp"
 #include "mods.hpp"
 #include "ultramodern/ultramodern.hpp"
@@ -40,17 +43,17 @@
 
 namespace {
 
-enum class Screen { Main, Stages, Checkpoints, Display, Mods, ModSettings, ConfirmRestart, ConfirmExit };
+enum class Screen { Main, Stages, Checkpoints, Display, Controls, Mods, ModSettings, ConfirmRestart, ConfirmExit };
 enum class Action { Toggle, Up, Down, Left, Right, Accept, Back };
 
 constexpr int visible_rows = 10;
-enum MainItem { MainLevelSelect, MainDisplay, MainMods, MainReturn, MainExit };
-const char* const main_items[] = {"LEVEL SELECT", "DISPLAY", "MODS", "RETURN TO GAME", "EXIT GAME"};
-const char* const exit_items[] = {"EXIT GAME", "CANCEL"};
-const char* const restart_items[] = {"RESTART", "CANCEL"};
+enum MainItem { MainLevelSelect, MainDisplay, MainControls, MainMods, MainReturn, MainExit };
+const char* const main_items[] = {"Level Select", "Display", "Controls", "Mods", "Return to Game", "Exit Game"};
+const char* const exit_items[] = {"Exit Game", "Cancel"};
+const char* const restart_items[] = {"Restart", "Cancel"};
 
 // Display screen rows. Each option's values are its enum's values in order;
-// OFF/ON options are bools.
+// Off/On options are bools.
 enum DisplayItem { DisplayWindowMode, DisplayResolution, DisplayWidescreen, DisplayCrop, DisplayInteger, DisplayAntialiasing };
 struct DisplayOption {
     const char* name;
@@ -58,23 +61,23 @@ struct DisplayOption {
     std::vector<const char*> values;
 };
 const DisplayOption display_options[] = {
-    {"WINDOW MODE", "BORDERLESS covers the screen with a window and switches away instantly. FULLSCREEN"
+    {"Window Mode", "Borderless covers the screen with a window and switches away instantly. Fullscreen"
                     " takes over the screen; it can help with stutter on some PCs. F11 or Alt+Enter also"
                     " switch between windowed and full screen.",
-     {"WINDOWED", "BORDERLESS", "FULLSCREEN"}},
-    {"RESOLUTION", "How sharply 3D is drawn. ORIGINAL keeps the N64's look: 240 lines, or 216 with the"
-                   " overscan cropped. DOUBLE draws twice as many. MATCH WINDOW draws at the window's size.",
-     {"ORIGINAL", "DOUBLE", "MATCH WINDOW"}},
-    {"WIDESCREEN", "ON shows a 16:9 picture with more of the world at the sides. OFF keeps the N64's 4:3.",
-     {"OFF", "ON"}},
-    {"CROP OVERSCAN", "WinBack leaves a black border around its picture, which old TVs hid past the edge"
-                      " of the screen. ON cuts the border off so the picture fills more of the window.",
-     {"OFF", "ON"}},
-    {"INTEGER SCALE", "ON enlarges the picture only in whole steps, so every game pixel is the same size."
+     {"Windowed", "Borderless", "Fullscreen"}},
+    {"Resolution", "How sharply 3D is drawn. Original keeps the N64's look: 240 lines, or 216 with the"
+                   " overscan cropped. Double draws twice as many. Match Window draws at the window's size.",
+     {"Original", "Double", "Match Window"}},
+    {"Widescreen", "On shows a 16:9 picture with more of the world at the sides. Off keeps the N64's 4:3.",
+     {"Off", "On"}},
+    {"Crop Overscan", "WinBack leaves a black border around its picture, which old TVs hid past the edge"
+                      " of the screen. On cuts the border off so the picture fills more of the window.",
+     {"Off", "On"}},
+    {"Integer Scale", "On enlarges the picture only in whole steps, so every game pixel is the same size."
                       " The rest of the window stays black.",
-     {"OFF", "ON"}},
-    {"ANTI-ALIASING", "Smooths jagged edges on 3D models. Higher settings cost more graphics power.",
-     {"OFF", "2X MSAA", "4X MSAA", "8X MSAA"}},
+     {"Off", "On"}},
+    {"Anti-Aliasing", "Smooths jagged edges on 3D models. Higher settings cost more graphics power.",
+     {"Off", "2x MSAA", "4x MSAA", "8x MSAA"}},
 };
 
 int display_value(const winback::display::Settings& d, int option) {
@@ -88,14 +91,14 @@ int display_value(const winback::display::Settings& d, int option) {
     }
 }
 
-// The value as shown. ORIGINAL and DOUBLE give the number of lines shown, which
+// The value as shown. Original and Double give the number of lines shown, which
 // cropping the overscan reduces from 240 to the 216 the game draws.
 std::string display_label(const winback::display::Settings& d, int option) {
     int v = display_value(d, option);
     std::string label = display_options[option].values[v];
     if (option == DisplayResolution && v <= int(ultramodern::renderer::Resolution::Original2x)) {
         int lines = d.crop_overscan ? 216 : 240;
-        label += " (" + std::to_string(lines * (v + 1)) + "P)";
+        label += " (" + std::to_string(lines * (v + 1)) + "p)";
     }
     return label;
 }
@@ -112,6 +115,39 @@ void set_display_value(winback::display::Settings& d, int option, int value) {
     }
 }
 
+// Controls screen rows: the preset, each controller button, the right stick and
+// the game's menus, then (for Custom only) the two resets.
+namespace In = winback::input;
+constexpr int ControlsPreset = 0;
+constexpr int ControlsFirstButton = 1;
+constexpr int ControlsRightStick = ControlsFirstButton + In::PadCount;
+constexpr int ControlsMenus = ControlsRightStick + 1;
+constexpr int ControlsResetPS2 = ControlsMenus + 1;
+constexpr int ControlsResetN64 = ControlsResetPS2 + 1;
+
+int controls_rows(const In::ControlSettings& c) {
+    return c.preset == In::Preset::Custom ? ControlsResetN64 + 1 : ControlsMenus + 1;
+}
+
+const char* const preset_names[] = {"PS2 Style", "N64 Style", "Custom"};
+static_assert(std::size(preset_names) == size_t(In::Preset::Count));
+// What each N64 button does in play, where it's known.
+const char* const bind_names[] = {
+    "None", "A (Action)", "B (Reload)", "Z (Crouch)", "R (Aim)", "L", "Start (Pause)",
+    "C-Up (Weapon)", "C-Down (Lock On)", "C-Left (Camera)", "C-Right (Camera)",
+    "D-Up", "D-Down (C4)", "D-Left", "D-Right", "Camera Behind",
+};
+static_assert(std::size(bind_names) == size_t(In::Bind::Count));
+const char* const stick_names[] = {"Camera", "C Buttons", "None"};
+static_assert(std::size(stick_names) == size_t(In::RightStick::Count));
+
+// Steps an enum value by delta, wrapping around.
+template <typename E>
+void step_enum(E& v, int delta) {
+    int n = int(E::Count);
+    v = E((int(v) + delta + n) % n);
+}
+
 struct State {
     bool open = false;
     Screen screen = Screen::Main;
@@ -121,6 +157,8 @@ struct State {
     int display_sel = 0;
     int exit_sel = 1;
     winback::display::Settings display;
+    int controls_sel = 0;
+    winback::input::ControlSettings controls;
     int mods_sel = 0;    // Mods, then broken mods, then Restart.
     int option_sel = 0;  // Mod settings: 0 = on/off, then the mod's options.
     int restart_sel = 1;
@@ -134,6 +172,8 @@ struct State {
 struct Effects {
     bool display = false;
     winback::display::Settings display_settings;
+    bool controls = false;
+    winback::input::ControlSettings controls_settings;
     bool quit = false;
     bool restart = false;
 };
@@ -148,6 +188,7 @@ int row_count(const State& s) {
         case Screen::Stages: return int(winback::levels::stages().size());
         case Screen::Checkpoints: return 1 + int(winback::levels::stages()[s.stage_sel].checkpoints.size());
         case Screen::Display: return int(std::size(display_options));
+        case Screen::Controls: return controls_rows(s.controls);
         case Screen::Mods: return int(s.mods->size() + s.broken_mods->size()) + 1;
         case Screen::ModSettings: return 1 + int((*s.mods)[s.mods_sel].options.size());
         case Screen::ConfirmRestart: return int(std::size(restart_items));
@@ -161,6 +202,7 @@ int& selection(State& s) {
         case Screen::Main: return s.main_sel;
         case Screen::Stages: return s.stage_sel;
         case Screen::Display: return s.display_sel;
+        case Screen::Controls: return s.controls_sel;
         case Screen::Mods: return s.mods_sel;
         case Screen::ModSettings: return s.option_sel;
         case Screen::ConfirmRestart: return s.restart_sel;
@@ -185,6 +227,45 @@ void change_display(State& s, int delta, Effects& fx) {
     set_display_value(s.display, s.display_sel, v);
     fx.display = true;
     fx.display_settings = s.display;
+}
+
+// Steps the selected controls row by delta. Only the preset can change unless
+// it is Custom.
+void change_controls(State& s, int delta, Effects& fx) {
+    In::ControlSettings& c = s.controls;
+    int row = s.controls_sel;
+    if (row == ControlsPreset) {
+        step_enum(c.preset, delta);
+    }
+    else if (c.preset != In::Preset::Custom) {
+        return;
+    }
+    else if (row < ControlsRightStick) {
+        step_enum(c.custom.buttons[row - ControlsFirstButton], delta);
+    }
+    else if (row == ControlsRightStick) {
+        step_enum(c.custom.right_stick, delta);
+    }
+    else if (row == ControlsMenus) {
+        step_enum(c.custom.menus, delta);
+    }
+    else {
+        return;
+    }
+    fx.controls = true;
+    fx.controls_settings = c;
+}
+
+// Accept on the Controls screen: the resets, or the next value.
+void accept_controls(State& s, Effects& fx) {
+    if (s.controls_sel == ControlsResetPS2 || s.controls_sel == ControlsResetN64) {
+        s.controls.custom = In::preset_layout(s.controls_sel == ControlsResetPS2 ? In::Preset::PS2 : In::Preset::N64);
+        fx.controls = true;
+        fx.controls_settings = s.controls;
+    }
+    else {
+        change_controls(s, 1, fx);
+    }
 }
 
 void refresh_mods(State& s) {
@@ -230,6 +311,7 @@ Effects apply_locked(Action a) {
         case Action::Left:
         case Action::Right:
             if (s.screen == Screen::Display) change_display(s, a == Action::Left ? -1 : 1, fx);
+            else if (s.screen == Screen::Controls) change_controls(s, a == Action::Left ? -1 : 1, fx);
             else if (s.screen == Screen::ModSettings || (s.screen == Screen::Mods && on_mod_row(s))) {
                 change_mod(s, a == Action::Left ? -1 : 1);
             }
@@ -251,6 +333,11 @@ Effects apply_locked(Action a) {
                         s.screen = Screen::Display;
                         s.display = winback::display::get();
                         break;
+                    case MainControls:
+                        s.screen = Screen::Controls;
+                        s.controls = winback::input::get_controls();
+                        s.controls_sel = 0;
+                        break;
                     case MainMods:
                         s.screen = Screen::Mods;
                         s.mods_sel = 0;
@@ -265,6 +352,9 @@ Effects apply_locked(Action a) {
             }
             else if (s.screen == Screen::Display) {
                 change_display(s, 1, fx);
+            }
+            else if (s.screen == Screen::Controls) {
+                accept_controls(s, fx);
             }
             else if (s.screen == Screen::Mods) {
                 if (on_mod_row(s)) {
@@ -311,6 +401,9 @@ void apply(Action a) {
     }
     if (fx.display) {
         winback::display::set(fx.display_settings);
+    }
+    if (fx.controls) {
+        winback::input::set_controls(fx.controls_settings);
     }
     if (fx.quit) {
         std::printf("[menu] exit game\n");
@@ -468,12 +561,38 @@ std::string rows(int count, int sel, auto&& make_row) {
     int first = std::clamp(sel - visible_rows / 2, 0, std::max(count - visible_rows, 0));
     int last = std::min(first + visible_rows, count);
     std::string out;
-    out += first > 0 ? "<div class=\"more\">&#x2191; MORE</div>" : "<div class=\"more\"></div>";
+    out += first > 0 ? "<div class=\"more\">&#x2191; More</div>" : "<div class=\"more\"></div>";
     for (int i = first; i < last; i++) {
         out += make_row(i, i == sel);
     }
     if (last < count) {
-        out += "<div class=\"more\">&#x2193; MORE</div>";
+        out += "<div class=\"more\">&#x2193; More</div>";
+    }
+    return out;
+}
+
+// Text the game keeps in capitals, such as area names, as "Outer Ground".
+std::string title_case(const std::string& text) {
+    std::string out = text;
+    bool word_start = true;
+    for (char& ch : out) {
+        bool letter = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
+        if (letter && !word_start && ch >= 'A' && ch <= 'Z') {
+            ch = char(ch - 'A' + 'a');
+        }
+        word_start = !letter && ch != '\'';
+    }
+    return out;
+}
+
+// The key hints along the bottom.
+std::string hint_key(const char* key, const char* action) {
+    return std::string("<span class=\"key\">") + key + "</span> " + action;
+}
+std::string hints(std::initializer_list<std::string> items) {
+    std::string out;
+    for (const std::string& item : items) {
+        out += (out.empty() ? "" : " &#160;&#160;&#160; ") + item;
     }
     return out;
 }
@@ -495,7 +614,7 @@ bool playstation_pad() {
 // The hints are written with Xbox's button names, which share their positions with these.
 std::string for_this_pad(std::string hint) {
     if (playstation_pad()) {
-        for (const auto& [from, to] : {std::pair{">A<", ">CROSS<"}, std::pair{">B<", ">CIRCLE<"}}) {
+        for (const auto& [from, to] : {std::pair{">A<", ">Cross<"}, std::pair{">B<", ">Circle<"}}) {
             size_t at = hint.find(from);
             if (at != std::string::npos) {
                 hint.replace(at, std::strlen(from), to);
@@ -505,18 +624,113 @@ std::string for_this_pad(std::string hint) {
     return hint;
 }
 
+// A controller button's name on the pad in use.
+const char* pad_name(int pad) {
+    static const char* const xbox[] = {
+        "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Start", "Left Stick Press", "Right Stick Press",
+        "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right",
+    };
+    static const char* const playstation[] = {
+        "Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "Start", "L3", "R3",
+        "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right",
+    };
+    static_assert(std::size(xbox) == size_t(In::PadCount) && std::size(playstation) == size_t(In::PadCount));
+    return (playstation_pad() ? playstation : xbox)[pad];
+}
+
+std::string menus_label(In::MenuButtons m) {
+    if (m == In::MenuButtons::AsPlay) {
+        return "Same as Play";
+    }
+    return std::string(pad_name(In::PadA)) + " / " + pad_name(In::PadB);
+}
+
+void rebuild_controls(const State& s) {
+    const In::ControlSettings& c = s.controls;
+    bool custom = c.preset == In::Preset::Custom;
+    In::Layout layout = In::active_layout(c);
+    set_title("Controls");
+    set_text("subtitle", "Controller layout");
+    // Name and value of each row; values that can change get arrows.
+    auto row = [&](int i, std::string& name, std::string& value) {
+        bool fixed = !custom && i != ControlsPreset;
+        if (i == ControlsPreset) {
+            name = "Preset";
+            value = preset_names[size_t(c.preset)];
+        }
+        else if (i < ControlsRightStick) {
+            name = pad_name(i - ControlsFirstButton);
+            value = bind_names[size_t(layout.buttons[i - ControlsFirstButton])];
+        }
+        else if (i == ControlsRightStick) {
+            name = "Right Stick";
+            value = stick_names[size_t(layout.right_stick)];
+        }
+        else if (i == ControlsMenus) {
+            name = "Game Menus";
+            value = menus_label(layout.menus);
+        }
+        else {
+            name = i == ControlsResetPS2 ? "Reset to PS2 Style" : "Reset to N64 Style";
+            value.clear();
+            return false;
+        }
+        return !fixed;
+    };
+    set_text("list", rows(controls_rows(c), s.controls_sel, [&](int i, bool sel) {
+        std::string name, value;
+        bool changeable = row(i, name, value);
+        if (value.empty()) {
+            return plate(name, sel);
+        }
+        return changeable ? plate(name, sel, "&lt; " + value + " &gt;", "value") : plate(name, sel, value, "basic");
+    }));
+    std::string name, value;
+    row(s.controls_sel, name, value);
+    std::string note;
+    int i = s.controls_sel;
+    if (i == ControlsPreset) {
+        note = "PS2 Style - The PlayStation 2 release's layout.<br/><br/>"
+               "N64 Style - The Nintendo 64 original release's layout.<br/><br/>"
+               "Custom - Choose what each button does.";
+    }
+    else if (i < ControlsRightStick) {
+        note = "The game button this controller button presses. Camera Behind turns the camera to face the way"
+               " the player faces.";
+    }
+    else if (i == ControlsRightStick) {
+        note = "Camera - Turns the camera by how far the stick is pushed.<br/><br/>"
+               "C Buttons - Presses C-Up, C-Down, C-Left and C-Right, as the N64's C buttons do.";
+    }
+    else if (i == ControlsMenus) {
+        note = menus_label(In::MenuButtons::AB) + " - Confirms and goes back in the game's menus and on the pause"
+               " screen, whatever those buttons do in play.<br/><br/>"
+               "Same as Play - Uses the buttons above there too. The game confirms with A and goes back with B.";
+    }
+    else {
+        note = std::string("Sets every custom button back to ") + (i == ControlsResetPS2 ? "PS2" : "N64") + " Style.";
+    }
+    if (!custom && i != ControlsPreset) {
+        note += "<br/><br/>Choose the Custom preset to change it.";
+    }
+    set_text("detail", "<div class=\"head\">" + name + "</div>" + (value.empty() ? "" : "<div>" + value + "</div>")
+        + "<div class=\"note\">" + note + "</div>");
+}
+
 void rebuild(const State& s) {
     namespace L = winback::levels;
-    std::string hint = "<span class=\"key\">A</span> CHOOSE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
-                       " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";
+    const std::string choose_hint = hints({hint_key("A", "Choose"), hint_key("B", "Back"), hint_key("Select", "Close")});
+    const std::string change_hint = hints({hint_key("Left/Right", "Change"), hint_key("B", "Back"), hint_key("Select", "Close")});
+    std::string hint = choose_hint;
     if (s.screen == Screen::Main) {
-        set_title("RECOMP MENU");
+        set_title("Recomp Menu");
         set_text("subtitle", "WinBack Recompiled");
         set_text("list", rows(int(std::size(main_items)), s.main_sel,
             [](int i, bool sel) { return plate(main_items[i], sel); }));
         static const char* const notes[] = {
             "Jump to the start of any stage, or to one of its checkpoints.",
             "Window mode, resolution and other picture settings.",
+            "Choose a controller layout, or set your own buttons.",
             "Turn mods on or off and change their settings.",
             "Close this menu.",
             "Close WinBack Recompiled.",
@@ -525,7 +739,7 @@ void rebuild(const State& s) {
             "<div class=\"note\">" + notes[s.main_sel] + "</div>");
     }
     else if (s.screen == Screen::Display) {
-        set_title("DISPLAY");
+        set_title("Display");
         set_text("subtitle", "Picture settings");
         set_text("list", rows(int(std::size(display_options)), s.display_sel, [&](int i, bool sel) {
             const DisplayOption& opt = display_options[i];
@@ -535,23 +749,26 @@ void rebuild(const State& s) {
         set_text("detail", std::string("<div class=\"head\">") + opt.name + "</div>"
             "<div>" + display_label(s.display, s.display_sel) + "</div>"
             "<div class=\"note\">" + opt.note + "</div>");
-        hint = "<span class=\"key\">LEFT/RIGHT</span> CHANGE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
-               " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";
+        hint = change_hint;
+    }
+    else if (s.screen == Screen::Controls) {
+        rebuild_controls(s);
+        hint = s.controls_sel >= ControlsResetPS2 ? choose_hint : change_hint;
     }
     else if (s.screen == Screen::Mods) {
         int mod_count = int(s.mods->size());
         int broken_count = int(s.broken_mods->size());
-        set_title("MODS");
+        set_title("Mods");
         set_text("subtitle", mod_count + broken_count == 0 ? "No mods found" : "Installed mods");
         set_text("list", rows(mod_count + broken_count + 1, s.mods_sel, [&](int i, bool sel) {
             if (i < mod_count) {
                 bool on = (*s.mods)[i].enabled;
-                return plate(escaped((*s.mods)[i].name), sel, on ? "ON" : "OFF", on ? "recorded" : "basic");
+                return plate(escaped((*s.mods)[i].name), sel, on ? "On" : "Off", on ? "recorded" : "basic");
             }
             if (i < mod_count + broken_count) {
-                return plate(escaped((*s.broken_mods)[i - mod_count].name), sel, "ERROR", "basic");
+                return plate(escaped((*s.broken_mods)[i - mod_count].name), sel, "Error", "basic");
             }
-            return plate("RESTART GAME", sel, s.restart_needed ? "CHANGES WAITING" : "", "value");
+            return plate("Restart Game", sel, s.restart_needed ? "Changes waiting" : "", "value");
         }));
         if (s.mods_sel < mod_count) {
             const winback::mods::Mod& m = (*s.mods)[s.mods_sel];
@@ -559,8 +776,7 @@ void rebuild(const State& s) {
                 "<div>Version " + escaped(m.version) + "</div>"
                 "<div class=\"area\">" + escaped(m.authors) + "</div>"
                 "<div class=\"note\">" + escaped(m.description) + "</div>");
-            hint = "<span class=\"key\">LEFT/RIGHT</span> ON/OFF &#160;&#160;&#160; <span class=\"key\">A</span> OPEN"
-                   " &#160;&#160;&#160; <span class=\"key\">B</span> BACK";
+            hint = hints({hint_key("Left/Right", "On/Off"), hint_key("A", "Open"), hint_key("B", "Back")});
         }
         else if (s.mods_sel < mod_count + broken_count) {
             const winback::mods::BrokenMod& b = (*s.broken_mods)[s.mods_sel - mod_count];
@@ -568,26 +784,26 @@ void rebuild(const State& s) {
                 "<div class=\"note\">This mod couldn't be opened: " + escaped(b.reason) + "</div>");
         }
         else {
-            set_text("detail", std::string("<div class=\"head\">RESTART GAME</div><div class=\"note\">")
+            set_text("detail", std::string("<div class=\"head\">Restart Game</div><div class=\"note\">")
                 + (s.restart_needed ? "Turning mods on or off takes effect after a restart."
                                     : "Mods added to the mods folder appear after a restart.") + "</div>");
         }
     }
     else if (s.screen == Screen::ModSettings) {
         const winback::mods::Mod& m = (*s.mods)[s.mods_sel];
-        set_title("MOD SETTINGS");
+        set_title("Mod Settings");
         set_text("subtitle", escaped(m.name));
         set_text("list", rows(1 + int(m.options.size()), s.option_sel, [&](int i, bool sel) {
             if (i == 0) {
-                return plate("ENABLED", sel, std::string("&lt; ") + (m.enabled ? "ON" : "OFF") + " &gt;", "value");
+                return plate("Enabled", sel, std::string("&lt; ") + (m.enabled ? "On" : "Off") + " &gt;", "value");
             }
             const winback::mods::Option& o = m.options[i - 1];
             bool fixed = o.disabled || o.type == winback::mods::OptionType::String;
             return plate(escaped(o.name), sel, fixed ? escaped(o.value) : "&lt; " + escaped(o.value) + " &gt;", fixed ? "basic" : "value");
         }));
         if (s.option_sel == 0) {
-            set_text("detail", "<div class=\"head\">ENABLED</div><div class=\"note\">Turning a mod on or off"
-                " takes effect after a restart. Use RESTART GAME on the Mods screen.</div>");
+            set_text("detail", "<div class=\"head\">Enabled</div><div class=\"note\">Turning a mod on or off"
+                " takes effect after a restart. Use Restart Game on the Mods screen.</div>");
         }
         else {
             const winback::mods::Option& o = m.options[s.option_sel - 1];
@@ -598,64 +814,63 @@ void rebuild(const State& s) {
             set_text("detail", "<div class=\"head\">" + escaped(o.name) + "</div>"
                 "<div>" + escaped(o.value) + "</div><div class=\"note\">" + note + "</div>");
         }
-        hint = "<span class=\"key\">LEFT/RIGHT</span> CHANGE &#160;&#160;&#160; <span class=\"key\">B</span> BACK"
-               " &#160;&#160;&#160; <span class=\"key\">SELECT</span> CLOSE";
+        hint = change_hint;
     }
     else if (s.screen == Screen::ConfirmRestart) {
-        set_title("RESTART GAME");
+        set_title("Restart Game");
         set_text("subtitle", "Restart WinBack Recompiled?");
         set_text("list", rows(int(std::size(restart_items)), s.restart_sel,
             [](int i, bool sel) { return plate(restart_items[i], sel); }));
-        set_text("detail", "<div class=\"head\">RESTART GAME</div><div class=\"note\">Progress since your last"
+        set_text("detail", "<div class=\"head\">Restart Game</div><div class=\"note\">Progress since your last"
             " Controller Pak save is lost. Recorded checkpoints are kept.</div>");
     }
     else if (s.screen == Screen::ConfirmExit) {
-        set_title("EXIT GAME");
+        set_title("Exit Game");
         set_text("subtitle", "Close WinBack Recompiled?");
         set_text("list", rows(int(std::size(exit_items)), s.exit_sel,
             [](int i, bool sel) { return plate(exit_items[i], sel); }));
-        set_text("detail", "<div class=\"head\">EXIT GAME</div><div class=\"note\">Progress since your last"
+        set_text("detail", "<div class=\"head\">Exit Game</div><div class=\"note\">Progress since your last"
             " Controller Pak save is lost. Recorded checkpoints are kept.</div>");
     }
     else if (s.screen == Screen::Stages) {
         const auto& stages = L::stages();
-        set_title("LEVEL SELECT");
+        set_title("Level Select");
         set_text("subtitle", "Choose a stage");
         set_text("list", rows(int(stages.size()), s.stage_sel, [&](int i, bool sel) {
-            return plate("STAGE " + two_digits(stages[i].number + 1) + " &#8211; " + stages[i].area, sel);
+            return plate("Stage " + two_digits(stages[i].number + 1) + " &#8211; " + title_case(stages[i].area), sel);
         }));
         const L::Stage& st = stages[s.stage_sel];
         int recorded = 0;
         for (const auto& cp : st.checkpoints) {
             recorded += L::is_recorded(st.number, cp) ? 1 : 0;
         }
-        set_text("detail", "<div class=\"head\">STAGE " + two_digits(st.number + 1) + "</div>"
-            "<div class=\"area\">" + st.area + "</div>"
+        set_text("detail", "<div class=\"head\">Stage " + two_digits(st.number + 1) + "</div>"
+            "<div class=\"area\">" + title_case(st.area) + "</div>"
             "<div>Checkpoints: " + std::to_string(st.checkpoints.size()) + "</div>"
             "<div>Recorded: " + std::to_string(recorded) + "</div>"
-            "<div class=\"note\">A checkpoint is RECORDED once you reach it in play. Until then it loads"
-            " a BASIC version: a fresh stage with you placed at the checkpoint.</div>");
+            "<div class=\"note\">A checkpoint is Recorded once you reach it in play. Until then it loads"
+            " a Basic version: a fresh stage with you placed at the checkpoint.</div>");
     }
     else {
         const L::Stage& st = L::stages()[s.stage_sel];
-        set_title("STAGE " + two_digits(st.number + 1));
-        set_text("subtitle", st.area);
+        set_title("Stage " + two_digits(st.number + 1));
+        set_text("subtitle", title_case(st.area));
         set_text("list", rows(1 + int(st.checkpoints.size()), s.row_sel, [&](int i, bool sel) {
             if (i == 0) {
-                return plate("STAGE START", sel);
+                return plate("Stage Start", sel);
             }
             bool rec = L::is_recorded(st.number, st.checkpoints[i - 1]);
-            return plate("CHECKPOINT " + two_digits(i), sel, rec ? "RECORDED" : "BASIC", rec ? "recorded" : "basic");
+            return plate("Checkpoint " + two_digits(i), sel, rec ? "Recorded" : "Basic", rec ? "recorded" : "basic");
         }));
         if (s.row_sel == 0) {
-            set_text("detail", "<div class=\"head\">STAGE START</div><div class=\"note\">Starts the stage from the beginning,"
+            set_text("detail", "<div class=\"head\">Stage Start</div><div class=\"note\">Starts the stage from the beginning,"
                 " as the game's own mission start does.</div>");
         }
         else {
             const L::Checkpoint& cp = st.checkpoints[s.row_sel - 1];
             bool rec = L::is_recorded(st.number, cp);
-            set_text("detail", "<div class=\"head\">CHECKPOINT " + two_digits(s.row_sel) + "</div>"
-                "<div>" + (rec ? "RECORDED" : "BASIC") + "</div>"
+            set_text("detail", "<div class=\"head\">Checkpoint " + two_digits(s.row_sel) + "</div>"
+                "<div>" + (rec ? "Recorded" : "Basic") + "</div>"
                 "<div class=\"area\">Map " + two_digits(cp.map) + ", checkpoint " + std::to_string(cp.id) + "</div>"
                 "<div class=\"note\">" + (rec ? "Loads the snapshot saved when you reached this checkpoint."
                                               : "Not reached yet: loads a fresh stage with you placed here.") + "</div>");

@@ -82,6 +82,17 @@
         { "label": "On", "set": { "integer_scale": "true" } }
       ],
       "defaults": { "integer_scale": "false" }
+    },
+    {
+      "id": "controls",
+      "label": "Controller layout",
+      "help": "PS2 Style is the PlayStation 2 release's layout. N64 Style puts the N64 controller's buttons where they sit on your pad. Custom uses the buttons you set in the game's Controls menu.",
+      "choices": [
+        { "label": "PS2 Style", "set": { "controls": "\"PS2\"" } },
+        { "label": "N64 Style", "set": { "controls": "\"N64\"" } },
+        { "label": "Custom", "set": { "controls": "\"Custom\"" } }
+      ],
+      "defaults": { "controls": "\"PS2\"" }
     }
   ],
   "saves": ["{install}/saves", "{install}/settings.json"],

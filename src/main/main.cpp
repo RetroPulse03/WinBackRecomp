@@ -379,6 +379,7 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
     winback::display::load(developer, fullscreen);
+    winback::input::load_controls();
     winback::menu::set_render_hooks();
     winback::mods::register_exports();
 

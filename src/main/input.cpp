@@ -8,17 +8,64 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <vector>
 
+#include <json/json.hpp>
+
 #include "sdl_include.hpp"
 #include "input.hpp"
 #include "menu.hpp"
+#include "settings_file.hpp"
+
+namespace winback::input {
+
+NLOHMANN_JSON_SERIALIZE_ENUM(Preset, {
+    {Preset::PS2, "PS2"},
+    {Preset::N64, "N64"},
+    {Preset::Custom, "Custom"},
+});
+
+NLOHMANN_JSON_SERIALIZE_ENUM(Bind, {
+    {Bind::None, "None"},
+    {Bind::A, "A"},
+    {Bind::B, "B"},
+    {Bind::Z, "Z"},
+    {Bind::R, "R"},
+    {Bind::L, "L"},
+    {Bind::Start, "Start"},
+    {Bind::CUp, "CUp"},
+    {Bind::CDown, "CDown"},
+    {Bind::CLeft, "CLeft"},
+    {Bind::CRight, "CRight"},
+    {Bind::DUp, "DUp"},
+    {Bind::DDown, "DDown"},
+    {Bind::DLeft, "DLeft"},
+    {Bind::DRight, "DRight"},
+    {Bind::CameraReset, "CameraReset"},
+});
+
+NLOHMANN_JSON_SERIALIZE_ENUM(RightStick, {
+    {RightStick::Camera, "Camera"},
+    {RightStick::CButtons, "CButtons"},
+    {RightStick::None, "None"},
+});
+
+NLOHMANN_JSON_SERIALIZE_ENUM(MenuButtons, {
+    {MenuButtons::AB, "AB"},
+    {MenuButtons::AsPlay, "AsPlay"},
+});
+
+} // namespace winback::input
 
 namespace {
+
+using namespace winback::input;
 
 enum N64Button : uint16_t {
     BTN_A = 0x8000, BTN_B = 0x4000, BTN_Z = 0x2000, BTN_START = 0x1000,
@@ -38,6 +85,9 @@ struct PadState {
     float cam_x = 0.0f;
     float cam_y = 0.0f;
     uint16_t cam_buttons = 0;
+    // For mods: the right stick as held, whatever the layout does with it.
+    float right_x = 0.0f;
+    float right_y = 0.0f;
     // For mods: the controller's own buttons (SDL button bits and these two for
     // the triggers), and the N64 buttons pressed by the keyboard or a script.
     uint32_t pad_buttons = 0;
@@ -86,47 +136,80 @@ bool in_gameplay() {
 uint32_t scripted_pad = 0;
 bool scripted_pad_used = false;
 
-// Classic scheme: the PS2 release's default layout. Menus always confirm
-// with A and go back with B.
-PadState read_controller(SDL_GameController* c, int player) {
+// The N64 buttons each Bind presses (none for None and CameraReset).
+constexpr uint16_t bind_masks[] = {
+    0, BTN_A, BTN_B, BTN_Z, BTN_R, BTN_L, BTN_START, BTN_CU, BTN_CD, BTN_CL, BTN_CR,
+    BTN_DU, BTN_DD, BTN_DL, BTN_DR, 0,
+};
+static_assert(std::size(bind_masks) == size_t(Bind::Count));
+
+// Each PadInput's bit in PadState::pad_buttons.
+constexpr uint32_t pad_bits[PadCount] = {
+    1u << SDL_CONTROLLER_BUTTON_A, 1u << SDL_CONTROLLER_BUTTON_B,
+    1u << SDL_CONTROLLER_BUTTON_X, 1u << SDL_CONTROLLER_BUTTON_Y,
+    1u << SDL_CONTROLLER_BUTTON_LEFTSHOULDER, 1u << SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,
+    PAD_LT, PAD_RT,
+    1u << SDL_CONTROLLER_BUTTON_START,
+    1u << SDL_CONTROLLER_BUTTON_LEFTSTICK, 1u << SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+    1u << SDL_CONTROLLER_BUTTON_DPAD_UP, 1u << SDL_CONTROLLER_BUTTON_DPAD_DOWN,
+    1u << SDL_CONTROLLER_BUTTON_DPAD_LEFT, 1u << SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
+};
+
+// The chosen controls (the window thread writes them, the controller thread
+// reads them).
+std::mutex controls_mutex;
+ControlSettings controls;
+
+// One controller through the given layout.
+PadState read_controller(SDL_GameController* c, int player, const Layout& layout) {
     PadState s{};
-    auto btn = [&](SDL_GameControllerButton b, uint16_t mask) {
-        if (SDL_GameControllerGetButton(c, b) || (scripted_pad & (1u << b))) s.buttons |= mask;
-    };
     for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++) {
         if (SDL_GameControllerGetButton(c, SDL_GameControllerButton(b))) s.pad_buttons |= 1u << b;
     }
     if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0.5f) s.pad_buttons |= PAD_LT;
     if (axis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0.5f) s.pad_buttons |= PAD_RT;
     s.pad_buttons |= scripted_pad;
-    if (in_gameplay()) {
-        btn(SDL_CONTROLLER_BUTTON_X, BTN_A);
-        btn(SDL_CONTROLLER_BUTTON_A, BTN_B);
-        btn(SDL_CONTROLLER_BUTTON_B, BTN_CU);
+    bool play = in_gameplay();
+    // In the game's menus A and B can be fixed to confirm and back. Other
+    // buttons that press A or B in play then do nothing there.
+    bool menu_ab = !play && layout.menus == MenuButtons::AB;
+    bool snap = false;
+    for (int i = 0; i < PadCount; i++) {
+        if (!(s.pad_buttons & pad_bits[i])) {
+            continue;
+        }
+        Bind b = layout.buttons[i];
+        if (menu_ab) {
+            if (i == PadA) b = Bind::A;
+            else if (i == PadB) b = Bind::B;
+            else if (b == Bind::A || b == Bind::B) continue;
+        }
+        snap |= b == Bind::CameraReset;
+        s.buttons |= bind_masks[size_t(b)];
     }
-    else {
-        btn(SDL_CONTROLLER_BUTTON_A, BTN_A);
-        btn(SDL_CONTROLLER_BUTTON_B, BTN_B);
-    }
-    btn(SDL_CONTROLLER_BUTTON_Y, BTN_CD);
-    btn(SDL_CONTROLLER_BUTTON_START, BTN_START);
-    btn(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, BTN_Z);
-    btn(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, BTN_R);
-    btn(SDL_CONTROLLER_BUTTON_DPAD_UP, BTN_DU);
-    btn(SDL_CONTROLLER_BUTTON_DPAD_DOWN, BTN_DD);
-    btn(SDL_CONTROLLER_BUTTON_DPAD_LEFT, BTN_DL);
-    btn(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, BTN_DR);
-    if (s.pad_buttons & PAD_LT) s.buttons |= BTN_CL;
-    if (s.pad_buttons & PAD_RT) s.buttons |= BTN_CR;
-    s.cam_x = axis(c, SDL_CONTROLLER_AXIS_RIGHTX);
-    s.cam_y = -axis(c, SDL_CONTROLLER_AXIS_RIGHTY);
-    if (s.cam_x > 0.5f) s.cam_buttons |= BTN_CR;
-    if (s.cam_x < -0.5f) s.cam_buttons |= BTN_CL;
-    bool rsc = SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
-    if (rsc && !rear_snap_held[player] && in_gameplay()) {
+    // Camera behind the player: once per press, during play.
+    if (snap && !rear_snap_held[player] && play) {
         rear_snap_pending[player] = true;
     }
-    rear_snap_held[player] = rsc;
+    rear_snap_held[player] = snap;
+    s.right_x = axis(c, SDL_CONTROLLER_AXIS_RIGHTX);
+    s.right_y = -axis(c, SDL_CONTROLLER_AXIS_RIGHTY);
+    switch (layout.right_stick) {
+        case RightStick::Camera:
+            s.cam_x = s.right_x;
+            s.cam_y = s.right_y;
+            if (s.cam_x > 0.5f) s.cam_buttons |= BTN_CR;
+            if (s.cam_x < -0.5f) s.cam_buttons |= BTN_CL;
+            break;
+        case RightStick::CButtons:
+            if (s.right_x > 0.5f) s.buttons |= BTN_CR;
+            if (s.right_x < -0.5f) s.buttons |= BTN_CL;
+            if (s.right_y > 0.5f) s.buttons |= BTN_CU;
+            if (s.right_y < -0.5f) s.buttons |= BTN_CD;
+            break;
+        default:
+            break;
+    }
     s.x = axis(c, SDL_CONTROLLER_AXIS_LEFTX);
     s.y = -axis(c, SDL_CONTROLLER_AXIS_LEFTY);
     return s;
@@ -252,10 +335,10 @@ void apply_autopress(PadState& s) {
                 case AUTO_SD: s.y = -1.0f; break;
                 case AUTO_SL: s.x = -1.0f; break;
                 case AUTO_SR: s.x = 1.0f; break;
-                case AUTO_RU: s.cam_y = 1.0f; break;
-                case AUTO_RD: s.cam_y = -1.0f; break;
-                case AUTO_RL: s.cam_x = -1.0f; break;
-                case AUTO_RR: s.cam_x = 1.0f; break;
+                case AUTO_RU: s.cam_y = s.right_y = 1.0f; break;
+                case AUTO_RD: s.cam_y = s.right_y = -1.0f; break;
+                case AUTO_RL: s.cam_x = s.right_x = -1.0f; break;
+                case AUTO_RR: s.cam_x = s.right_x = 1.0f; break;
                 default: break;
             }
         }
@@ -315,6 +398,11 @@ void winback::input::handle_event(const SDL_Event& ev) {
 // Called from the game's controller thread; reads the state the window thread
 // last saw (SDL keyboard/controller state is updated by event pumping).
 void winback::input::poll() {
+    Layout layout;
+    {
+        std::lock_guard lock{controls_mutex};
+        layout = active_layout(controls);
+    }
     std::array<PadState, max_players> next{};
     next[0] = read_keyboard();
     apply_autopress(next[0]);
@@ -323,7 +411,7 @@ void winback::input::poll() {
         if (controllers[i] == nullptr && (i != 0 || !scripted_pad_used)) {
             continue;
         }
-        PadState c = read_controller(controllers[i], i);
+        PadState c = read_controller(controllers[i], i, layout);
         next[i].buttons |= c.buttons;
         next[i].cam_buttons |= c.cam_buttons;
         next[i].pad_buttons |= c.pad_buttons;
@@ -332,6 +420,12 @@ void winback::input::poll() {
         }
         if (std::fabs(c.cam_y) > std::fabs(next[i].cam_y)) {
             next[i].cam_y = c.cam_y;
+        }
+        if (std::fabs(c.right_x) > std::fabs(next[i].right_x)) {
+            next[i].right_x = c.right_x;
+        }
+        if (std::fabs(c.right_y) > std::fabs(next[i].right_y)) {
+            next[i].right_y = c.right_y;
         }
         if (std::fabs(c.x) + std::fabs(c.y) > std::fabs(next[i].x) + std::fabs(next[i].y)) {
             next[i].x = c.x;
@@ -348,7 +442,7 @@ void winback::input::poll() {
         bool idle = true;
         for (const PadState& p : next) {
             idle &= p.buttons == 0 && p.cam_buttons == 0 && p.pad_buttons == 0 && p.x == 0.0f && p.y == 0.0f
-                && p.cam_x == 0.0f && p.cam_y == 0.0f;
+                && p.cam_x == 0.0f && p.cam_y == 0.0f && p.right_x == 0.0f && p.right_y == 0.0f;
         }
         menu_guard = winback::menu::is_open() || !idle;
         next = {};
@@ -379,7 +473,7 @@ winback::input::RawPad winback::input::read_raw(int controller_num) {
     }
     std::lock_guard lock{state_mutex};
     const PadState& p = pads[controller_num];
-    return {p.pad_buttons, p.other_buttons, p.x, p.y, p.cam_x, p.cam_y};
+    return {p.pad_buttons, p.other_buttons, p.x, p.y, p.right_x, p.right_y};
 }
 
 void winback::input::set_mod_pad(int controller_num, uint16_t buttons, float x, float y) {
@@ -403,4 +497,102 @@ ultramodern::input::connected_device_info_t winback::input::get_device_info(int 
         .connected_device = connected ? ultramodern::input::Device::Controller : ultramodern::input::Device::None,
         .connected_pak = connected ? ultramodern::input::Pak::RumblePak : ultramodern::input::Pak::None,
     };
+}
+
+// --- Controls ----------------------------------------------------------------
+
+winback::input::Layout winback::input::preset_layout(Preset preset) {
+    Layout l{};
+    if (preset == Preset::N64) {
+        // The recomp's first layout, from before the PS2 one: the N64 pad's
+        // buttons where an Xbox pad has them, and the same buttons in menus as
+        // in play.
+        l.buttons[PadA] = Bind::A;
+        l.buttons[PadB] = Bind::CDown;
+        l.buttons[PadX] = Bind::B;
+        l.buttons[PadY] = Bind::CLeft;
+        l.buttons[PadLB] = Bind::L;
+        l.buttons[PadRB] = Bind::R;
+        l.buttons[PadLT] = Bind::Z;
+        l.buttons[PadRT] = Bind::R;
+        l.right_stick = RightStick::CButtons;
+        l.menus = MenuButtons::AsPlay;
+    }
+    else {
+        // The PlayStation 2 release's default layout.
+        l.buttons[PadA] = Bind::B;
+        l.buttons[PadB] = Bind::CUp;
+        l.buttons[PadX] = Bind::A;
+        l.buttons[PadY] = Bind::CDown;
+        l.buttons[PadLB] = Bind::Z;
+        l.buttons[PadRB] = Bind::R;
+        l.buttons[PadLT] = Bind::CLeft;
+        l.buttons[PadRT] = Bind::CRight;
+        l.buttons[PadR3] = Bind::CameraReset;
+        l.right_stick = RightStick::Camera;
+        l.menus = MenuButtons::AB;
+    }
+    l.buttons[PadStart] = Bind::Start;
+    l.buttons[PadDUp] = Bind::DUp;
+    l.buttons[PadDDown] = Bind::DDown;
+    l.buttons[PadDLeft] = Bind::DLeft;
+    l.buttons[PadDRight] = Bind::DRight;
+    return l;
+}
+
+winback::input::Layout winback::input::active_layout(const ControlSettings& settings) {
+    return settings.preset == Preset::Custom ? settings.custom : preset_layout(settings.preset);
+}
+
+namespace {
+
+// settings.json keys for the custom layout's buttons, in PadInput order.
+const char* const pad_keys[PadCount] = {
+    "a", "b", "x", "y", "lb", "rb", "lt", "rt", "start", "l3", "r3",
+    "dpad_up", "dpad_down", "dpad_left", "dpad_right",
+};
+
+} // namespace
+
+void winback::input::load_controls() {
+    ControlSettings c;
+    nlohmann::json j = winback::settings_file::read();
+    try {
+        c.preset = j.value("controls", c.preset);
+        auto cc = j.find("custom_controls");
+        if (cc != j.end() && cc->is_object()) {
+            for (int i = 0; i < PadCount; i++) {
+                c.custom.buttons[i] = cc->value(pad_keys[i], c.custom.buttons[i]);
+            }
+            c.custom.right_stick = cc->value("right_stick", c.custom.right_stick);
+            c.custom.menus = cc->value("game_menus", c.custom.menus);
+        }
+    }
+    catch (const nlohmann::json::exception& e) {
+        std::fprintf(stderr, "[input] ignoring controls in settings.json: %s\n", e.what());
+    }
+    std::lock_guard lock{controls_mutex};
+    controls = c;
+}
+
+winback::input::ControlSettings winback::input::get_controls() {
+    std::lock_guard lock{controls_mutex};
+    return controls;
+}
+
+void winback::input::set_controls(const ControlSettings& c) {
+    {
+        std::lock_guard lock{controls_mutex};
+        controls = c;
+    }
+    nlohmann::json cc;
+    for (int i = 0; i < PadCount; i++) {
+        cc[pad_keys[i]] = c.custom.buttons[i];
+    }
+    cc["right_stick"] = c.custom.right_stick;
+    cc["game_menus"] = c.custom.menus;
+    nlohmann::json j;
+    j["controls"] = c.preset;
+    j["custom_controls"] = cc;
+    winback::settings_file::update(j);
 }
