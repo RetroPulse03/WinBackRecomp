@@ -83,7 +83,8 @@ int winback_camera_analog(uint8_t* rdram, recomp_context* ctx) {
     if (stick == 0.0f) {
         return 0;
     }
-    // Stick right acts as C-Right (0x0001), whichever way the game turns it.
+    // A positive value acts as C-Right (0x0001), whichever way the game turns
+    // it; the input layer sends stick right as negative (C-Left).
     float scale = stick > 0.0f ? stick : -stick;
     float dir = (ctx->r9 & 0x0001) ? -1.0f : 1.0f;
     if (stick < 0.0f) {

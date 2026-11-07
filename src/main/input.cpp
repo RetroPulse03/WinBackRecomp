@@ -196,7 +196,10 @@ PadState read_controller(SDL_GameController* c, int player, const Layout& layout
     s.right_y = -axis(c, SDL_CONTROLLER_AXIS_RIGHTY);
     switch (layout.right_stick) {
         case RightStick::Camera:
-            s.cam_x = s.right_x;
+            // The game's C-Right swings the camera around the player to the
+            // right, which turns the view left; stick right should turn it
+            // right, so it acts as C-Left.
+            s.cam_x = -s.right_x;
             s.cam_y = s.right_y;
             if (s.cam_x > 0.5f) s.cam_buttons |= BTN_CR;
             if (s.cam_x < -0.5f) s.cam_buttons |= BTN_CL;
@@ -337,8 +340,8 @@ void apply_autopress(PadState& s) {
                 case AUTO_SR: s.x = 1.0f; break;
                 case AUTO_RU: s.cam_y = s.right_y = 1.0f; break;
                 case AUTO_RD: s.cam_y = s.right_y = -1.0f; break;
-                case AUTO_RL: s.cam_x = s.right_x = -1.0f; break;
-                case AUTO_RR: s.cam_x = s.right_x = 1.0f; break;
+                case AUTO_RL: s.right_x = -1.0f; s.cam_x = 1.0f; break;
+                case AUTO_RR: s.right_x = 1.0f; s.cam_x = -1.0f; break;
                 default: break;
             }
         }
@@ -526,8 +529,9 @@ winback::input::Layout winback::input::preset_layout(Preset preset) {
         l.buttons[PadY] = Bind::CDown;
         l.buttons[PadLB] = Bind::Z;
         l.buttons[PadRB] = Bind::R;
-        l.buttons[PadLT] = Bind::CLeft;
-        l.buttons[PadRT] = Bind::CRight;
+        // The triggers turn the view their way (C-Right turns it left).
+        l.buttons[PadLT] = Bind::CRight;
+        l.buttons[PadRT] = Bind::CLeft;
         l.buttons[PadR3] = Bind::CameraReset;
         l.right_stick = RightStick::Camera;
         l.menus = MenuButtons::AB;
