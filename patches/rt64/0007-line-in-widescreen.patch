@@ -1,0 +1,106 @@
+diff --git a/src/gui/rt64_debugger_inspector.cpp b/src/gui/rt64_debugger_inspector.cpp
+index b0620a9..b354a2b 100644
+--- a/src/gui/rt64_debugger_inspector.cpp
++++ b/src/gui/rt64_debugger_inspector.cpp
+@@ -775,7 +775,7 @@ namespace RT64 {
+             ImGui::Indent();
+             for (size_t m = 0; m < modifyCount; m++) {
+                 const bool modifyZ = drawData.modifyPosUints[m * 2] & 0x1;
+-                const uint32_t modifyIndex = drawData.modifyPosUints[m * 2] >> 1;
++                const uint32_t modifyIndex = drawData.modifyPosUints[m * 2] >> 2;
+                 const uint32_t modifyValue = drawData.modifyPosUints[m * 2 + 1];
+                 ImGui::Text(modifyZ ? "Modify Z" : "Modify XY");
+                 ImGui::SameLine();
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 5a8015b..5bb4e2e 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -716,7 +716,7 @@ namespace RT64 {
+         }
+         case G_MWO_POINT_XYSCREEN: {
+             // First bit being 0 indicates it should modify only XY.
+-            modifyPosUints.emplace_back(globalIndex << 1);
++            modifyPosUints.emplace_back(globalIndex << 2);
+             modifyPosUints.emplace_back(value);
+ 
+             // We decode on the CPU anyway for draw area tracking and the debugger.
+@@ -728,7 +728,7 @@ namespace RT64 {
+         }
+         case G_MWO_POINT_ZSCREEN: {
+             // First bit being 1 indicates it should modify only Z.
+-            modifyPosUints.emplace_back((globalIndex << 1) | 0x1);
++            modifyPosUints.emplace_back((globalIndex << 2) | 0x1);
+             modifyPosUints.emplace_back(value);
+ 
+             // We decode on the CPU anyway for depth tracking, branchZ and the debugger.
+@@ -1071,7 +1071,7 @@ namespace RT64 {
+     //   line, with its ends cut vertically by a scissor set to the line's X extent. A line that is
+     //   flat or almost flat is drawn as a rectangle at the height of its top endpoint.
+     // Lines ignore the culling flags. With flat shading, the color comes from colorVtx and the alpha
+-    // from each endpoint. The quad is built from copies of the endpoints with screen XY overridden.
++    // from each endpoint. The quad is built from copies of the endpoints with screen XY offset.
+     void RSP::drawLine(uint8_t a, uint8_t b, uint8_t colorVtx, int8_t width) {
+         if ((a >= RSP_MAX_VERTICES) || (b >= RSP_MAX_VERTICES) || (colorVtx >= RSP_MAX_VERTICES)) {
+             assert(false && "Vertex index is not valid. DL is possibly corrupted.");
+@@ -1185,16 +1185,20 @@ namespace RT64 {
+             cornerX[3] = qx[bottom]; cornerY[3] = bottomY - offset;
+         }
+ 
++        // Each corner is stored as an offset from its endpoint's processed screen position rather than as
++        // an absolute position. The endpoint's position then includes the projection's aspect ratio
++        // correction (widescreen), so the line stays where the 3D around it is drawn. The offsets keep the
++        // line's width in screen pixels. Without the correction this is the same as absolute positions.
+         uint32_t corners[4];
+         for (int i = 0; i < 4; i++) {
+             const int e = (i < 2) ? top : bottom;
+-            const int16_t sx = int16_t(std::clamp(cornerX[i], int32_t(INT16_MIN), int32_t(INT16_MAX)));
+-            const int16_t sy = int16_t(std::clamp(cornerY[i], int32_t(INT16_MIN), int32_t(INT16_MAX)));
++            const int32_t ox = std::clamp(cornerX[i] - qx[e], int32_t(INT16_MIN), int32_t(INT16_MAX));
++            const int32_t oy = std::clamp(cornerY[i] - qy[e], int32_t(INT16_MIN), int32_t(INT16_MAX));
+             corners[i] = copyVertex(endIndices[e]);
+-            drawData.modifyPosUints.emplace_back(corners[i] << 1);
+-            drawData.modifyPosUints.emplace_back((uint32_t(uint16_t(sx)) << 16) | uint16_t(sy));
+-            drawData.posScreen[corners[i]][0] = sx / 4.0f;
+-            drawData.posScreen[corners[i]][1] = sy / 4.0f;
++            drawData.modifyPosUints.emplace_back((corners[i] << 2) | 0x2);
++            drawData.modifyPosUints.emplace_back((uint32_t(uint16_t(int16_t(ox))) << 16) | uint16_t(int16_t(oy)));
++            drawData.posScreen[corners[i]][0] = cornerX[i] / 4.0f;
++            drawData.posScreen[corners[i]][1] = cornerY[i] / 4.0f;
+         }
+ 
+         // Both triangles start at a corner of the first endpoint, which provides the flat shade color.
+diff --git a/src/shaders/RSPModifyCS.hlsl b/src/shaders/RSPModifyCS.hlsl
+index 06df1a7..ed50c86 100644
+--- a/src/shaders/RSPModifyCS.hlsl
++++ b/src/shaders/RSPModifyCS.hlsl
+@@ -18,9 +18,12 @@ void CSMain(uint modifyIndex : SV_DispatchThreadID) {
+         return;
+     }
+ 
++    // Bit 0 selects Z. Bit 1 makes XY an offset from the vertex's processed position, which already has
++    // the projection's aspect ratio correction (used by L3DEX2 lines so they stay on the 3D they follow).
+     const uint modifyOffset = modifyIndex * 2;
+     const bool modifyZ = srcModifyPos[modifyOffset] & 0x1;
+-    const uint vertexIndex = srcModifyPos[modifyOffset] >> 1;
++    const bool modifyRelative = srcModifyPos[modifyOffset] & 0x2;
++    const uint vertexIndex = srcModifyPos[modifyOffset] >> 2;
+     const uint modifyValue = srcModifyPos[modifyOffset + 1];
+     if (modifyZ) {
+         screenPos[vertexIndex].z = modifyValue / 65536.0f;
+@@ -30,7 +33,13 @@ void CSMain(uint modifyIndex : SV_DispatchThreadID) {
+         const uint extY = modifyValue & 0xFFFF;
+         const int intX = int(extX) << 16 >> 16;
+         const int intY = int(extY) << 16 >> 16;
+-        screenPos[vertexIndex].x = intX / 4.0f;
+-        screenPos[vertexIndex].y = intY / 4.0f;
++        if (modifyRelative) {
++            screenPos[vertexIndex].x += intX / 4.0f;
++            screenPos[vertexIndex].y += intY / 4.0f;
++        }
++        else {
++            screenPos[vertexIndex].x = intX / 4.0f;
++            screenPos[vertexIndex].y = intY / 4.0f;
++        }
+     }
+ }
+\ No newline at end of file
