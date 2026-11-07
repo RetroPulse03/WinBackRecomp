@@ -2,7 +2,7 @@
 
 Static recompilation of *WinBack: Covert Operations* (N64, USA) to a native PC executable. See [README.md](README.md) for building and playing, [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the pipeline, debugging and runtime constraints, and [WinBack Data](https://github.com/RetroPulse03/WinBackData) for how the game works and its ROM layout.
 
-@docs/DEVELOPMENT.md
+Read the relevant section of `docs/DEVELOPMENT.md` before changing the pipeline, runtime, rendering, menu, mods, Level Select or releases.
 
 ## Contribution rules
 
