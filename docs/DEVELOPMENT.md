@@ -223,9 +223,11 @@ Vulkan is the default on every platform (`src/main/main.cpp`), which keeps behav
 
 Versions follow [Semantic Versioning](https://semver.org/) and are tagged `vX.Y.Z`. To cut a release:
 
-1. Bump `project(VERSION)` in `CMakeLists.txt`.
-2. Build, then run `tools/package.ps1`.
-3. Tag the commit and attach the zip to a GitHub release. Mark test builds as pre-releases.
+1. Bump `project(VERSION)` in `CMakeLists.txt` before the build that gets play-tested. The version is compiled into the exe (its file version, the zip's name and mods' version checks), so changing it later means a rebuild.
+2. Bring the public pages up to date with the build, in the same commit as the version: `README.md` (Status, menu and controls, which RecompLauncher also shows as the listing's description), `recomplauncher.json` (a setting for each new `settings.json` option) and this file (Roadmap and any section the changes touched).
+3. Build, then run `tools/package.ps1`.
+4. Push `main`, tag the commit, and attach the zip to a GitHub release whose notes list what's new, what's fixed and known limitations. Mark test builds as pre-releases. Push WinBack Data and WinBack Mods too.
+5. Update the "About this recomp" text on each launcher's listing if what works or what's missing has changed. That text is written on the launcher's site, not read from GitHub.
 
 Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [Quiver Launcher](https://quiverlauncher.com/), both of which read GitHub releases directly:
 
@@ -248,9 +250,9 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** the graphics API and audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) and Controls (controller presets and custom buttons) are done; Widescreen widens the 3D and the game's view test and anchors the HUD to the edges, with cutscenes still to do.
+3. **Settings:** the graphics API and audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) and Controls (controller presets and custom buttons) are done; Widescreen widens the 3D and the game's view test and anchors the HUD to the edges; still to do are cutscenes kept at 4:3 and checking the split-screen HUD.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
-5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, widescreen, split-screen and custom characters.
+5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, split-screen and custom characters.
 6. **Linux build.**
 
 The long-term goal for the menu is to move its options into rebuilt in-game menus that match the game's own style.

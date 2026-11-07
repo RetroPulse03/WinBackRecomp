@@ -12,7 +12,15 @@ A native PC port of **WinBack: Covert Operations** (N64, USA), made by static re
 
 ## Status
 
-**Early release (v0.1).** The game plays from boot, through the intros, title screen and Controller Pak save, into the first mission at 60 fps. Mission 1 has been play-tested by hand, including aiming with the laser sight. Later missions haven't been tested much yet.
+**v0.3.** The game plays from boot, through the intros, title screen and Controller Pak save, into the first mission at 60 fps. Mission 1 has been play-tested by hand, including aiming with the laser sight and playing in widescreen. Later missions haven't been tested much yet.
+
+What's in it beyond the original game:
+
+- **Widescreen:** an optional 16:9 picture with the HUD at the picture's edges.
+- **Controller layouts:** PS2 Style (the default), N64 Style or your own buttons, with analog camera turning on the right stick.
+- **Recomp menu:** Level Select (jump to any stage or checkpoint), display settings and a Mods menu.
+
+Not done yet: cutscenes are widened too in widescreen instead of staying 4:3, split-screen hasn't been checked in widescreen, and there is no Linux build.
 
 If the game freezes or crashes, please [open an issue](https://github.com/RetroPulse03/WinBackRecomp/issues) and say where it happened. Please attach `logs/winback.log` from the game folder, which helps with diagnosis.
 
@@ -79,6 +87,7 @@ Press Select (or Esc) at any time to open the recomp menu over the game; press i
 
 - **Window mode:** Windowed, Borderless (a window covering the screen) or Fullscreen (exclusive full screen at your desktop resolution).
 - **Resolution:** how sharply the 3D scene is drawn. Original is the N64's 240 lines (216 with Crop overscan), Double is twice that, and Match window (the default) draws at the window's own size.
+- **Widescreen:** On shows a 16:9 picture with more of the world at the sides, and moves the HUD to the picture's edges. Off (the default) keeps the N64's 4:3.
 - **Crop overscan:** WinBack leaves a black border around its picture, which TVs of the time hid past the edge of the screen. On cuts the border off so the picture fills more of the window.
 - **Integer scale:** On enlarges the picture only in whole steps, so every game pixel is the same size. The rest of the window stays black.
 - **Anti-aliasing:** off, or 2x (default), 4x or 8x MSAA.
@@ -88,6 +97,8 @@ Press Select (or Esc) at any time to open the recomp menu over the game; press i
 - **PS2 Style** (default): the layout above. In menus A confirms and B goes back.
 - **N64 Style**: the N64 controller's buttons where they sit on the pad, the same in menus as in play: A is A, X is B, B is C-Down, Y is C-Left, LB is L, RB and RT are R, LT is Z, and the right stick presses the C buttons.
 - **Custom**: choose what each controller button presses, whether the right stick turns the camera or presses the C buttons, and whether the game's menus confirm with A and go back with B. A new custom layout starts as PS2 Style, and it can be reset to either preset.
+
+**Mods** lists the mods in the `mods/` folder. Turning a mod on or off takes effect after a restart, which the menu offers; a mod's own settings apply straight away. A mod that can't be loaded is listed with the reason.
 
 **Exit Game** closes the program after a confirmation. Progress since your last Controller Pak save is lost.
 

@@ -64,6 +64,16 @@
       "defaults": { "antialiasing": "\"MSAA2X\"" }
     },
     {
+      "id": "widescreen",
+      "label": "Widescreen",
+      "help": "On shows a 16:9 picture with more of the world at the sides and the HUD at the edges. Off keeps the N64's 4:3.",
+      "choices": [
+        { "label": "Off", "set": { "widescreen": "false" } },
+        { "label": "On", "set": { "widescreen": "true" } }
+      ],
+      "defaults": { "widescreen": "false" }
+    },
+    {
       "id": "crop_overscan",
       "label": "Crop overscan",
       "help": "Cuts off the black border old TVs hid, so the picture fills more of the window.",
