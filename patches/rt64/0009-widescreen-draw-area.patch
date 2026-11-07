@@ -1,0 +1,27 @@
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 5bb4e2e..b717d46 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -1047,6 +1047,22 @@ namespace RT64 {
+                 drawRect.lry = std::max(drawRect.lry, int32_t(hlslpp::ceil(v.y).x * 4.0f));
+             }
+ 
++            // In widescreen, a widened draw also shows what lies beyond the sides of its scissor. A triangle there
++            // is outside the scissor in 4:3 coordinates and would add nothing to the drawn area, so a framebuffer
++            // pair whose only draws are there (a task drawing a laser beyond the 4:3 picture) was never rendered.
++            // Such a triangle counts as drawing the scissor's nearest column, over the rows it covers.
++            if (state->ext.userConfig->aspectRatio != UserConfiguration::AspectRatio::Original) {
++                const int32_t ColumnWidth = 4;
++                if (drawRect.lrx <= scissorRect.ulx) {
++                    drawRect.ulx = scissorRect.ulx;
++                    drawRect.lrx = std::min(scissorRect.ulx + ColumnWidth, scissorRect.lrx);
++                }
++                else if (drawRect.ulx >= scissorRect.lrx) {
++                    drawRect.lrx = scissorRect.lrx;
++                    drawRect.ulx = std::max(scissorRect.lrx - ColumnWidth, scissorRect.ulx);
++                }
++            }
++
+             drawRect = scissorRect.intersection(drawRect);
+             if (!drawRect.isNull()) {
+                 fbPair.drawColorRect.merge(drawRect);
