@@ -103,6 +103,11 @@ void apply_renderer(const Settings& s, bool developer) {
 
 } // namespace
 
+// Read by the HUD hooks (src/game/hud.cpp) every frame.
+extern "C" int winback_widescreen_on(void) {
+    return widescreen_on ? 1 : 0;
+}
+
 // Hook in the game's view test (func_80028BB4): the objects it hides are those outside a horizontal half
 // angle of half_fov * k, where k is fixed for a 4:3 view (8:3 for two-player split screen). In widescreen
 // a view the renderer widens is 4/3 times as wide, so k grows by the ratio of the true half angles,

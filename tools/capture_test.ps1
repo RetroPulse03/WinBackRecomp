@@ -24,7 +24,7 @@ public static class Win {
 [Win]::SetProcessDPIAware() | Out-Null
 
 New-Item -ItemType Directory -Force $Out | Out-Null
-$proc = Start-Process -FilePath $Exe -ArgumentList "--rom", "romaserom.us.z64" -PassThru `
+$proc = Start-Process -FilePath $Exe -ArgumentList "--rom", "rom\baserom.us.z64" -PassThru `
     -RedirectStandardOutput "$Out\stdout.log" -RedirectStandardError "$Out\stderr.log"
 
 $interval = [math]::Max(1, [int]($Seconds / $Shots))

@@ -1,0 +1,35 @@
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index c852a16..e4e227e 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -956,6 +956,9 @@ namespace RT64 {
+         if (scissorStackSize < RDP_EXTENDED_STACK_SIZE) {
+             scissorRectStack[scissorStackSize] = scissorRectStack[scissorStackSize - 1];
+             scissorModeStack[scissorStackSize] = scissorModeStack[scissorStackSize - 1];
++            // The origins belong to the scissor, so a pop must bring back the pushed ones too.
++            scissorOriginStack[scissorStackSize - 1][0] = extended.scissorLeftOrigin;
++            scissorOriginStack[scissorStackSize - 1][1] = extended.scissorRightOrigin;
+             scissorStackSize++;
+         }
+     }
+@@ -963,6 +966,8 @@ namespace RT64 {
+     void RDP::popScissor() {
+         if (scissorStackSize > 1) {
+             scissorStackSize--;
++            extended.scissorLeftOrigin = scissorOriginStack[scissorStackSize - 1][0];
++            extended.scissorRightOrigin = scissorOriginStack[scissorStackSize - 1][1];
+             state->updateDrawStatusAttribute(DrawAttribute::Scissor);
+         }
+     }
+diff --git a/src/hle/rt64_rdp.h b/src/hle/rt64_rdp.h
+index b2022d1..e3f1152 100644
+--- a/src/hle/rt64_rdp.h
++++ b/src/hle/rt64_rdp.h
+@@ -117,6 +117,7 @@ namespace RT64 {
+         uint32_t fillColorStack[RDP_EXTENDED_STACK_SIZE];
+         FixedRect scissorRectStack[RDP_EXTENDED_STACK_SIZE];
+         uint8_t scissorModeStack[RDP_EXTENDED_STACK_SIZE];
++        uint16_t scissorOriginStack[RDP_EXTENDED_STACK_SIZE][2];
+         int colorCombinerStackSize;
+         int envColorStackSize;
+         int primColorStackSize;

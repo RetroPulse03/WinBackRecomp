@@ -69,6 +69,129 @@ func = "func_80028BB4"
 before_vram = 0x80028F1C
 text = "{ extern float winback_view_test_k(float, double, int); int widened = (MEM_BU(0, 0xFFFFFFFF8016A40EULL) & 3) || (MEM_HU(0, 0xFFFFFFFF8016A41CULL) & 0x600); ctx->f6.fl = winback_view_test_k(ctx->f6.fl, ctx->f0.d, widened); }"
 
+# HUD: anchors its parts to the picture's edges (src/game/hud.cpp). func_800D20CC draws the gameplay
+# HUD: after its setup display list (0x800D20F0) the scissor is widened, each part's call sets the part's
+# anchor, and before its closing display list (0x800D2384, reached on every path) both are restored.
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D20F0
+text = "{ extern void winback_hud_begin(uint8_t*); winback_hud_begin(rdram); }"
+
+# func_800CF6A8, life
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D212C
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 0); }"
+
+# func_800CEC1C, ammo
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D214C
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 1); }"
+
+# func_800CF7E8, weapon
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2154
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 2); }"
+
+# func_800CFA9C, alert indicator
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D215C
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 3); }"
+
+# func_800CF76C, second health bar
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2174
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 4); }"
+
+# func_800D0B14, target marker
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D217C
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 5); }"
+
+# func_800D0BE0, target marker
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2184
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 6); }"
+
+# func_800D0CCC, target marker
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D218C
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 7); }"
+
+# func_800D0E54, target marker
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2194
+text = "{ extern void winback_hud_part(uint8_t*, int); winback_hud_part(rdram, 8); }"
+
+# func_8007CBEC lines from ($a1, $a2) to ($a3, ...): the camera frame's corners, or a crosshair.
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2200
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2220
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D223C
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2258
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2278
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2294
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D22B0
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2318
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2334
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2354
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2374
+text = "{ extern void winback_hud_line(uint8_t*, int); winback_hud_line(rdram, (int)ctx->r5); }"
+
+[[patches.hook]]
+func = "func_800D20CC"
+before_vram = 0x800D2384
+text = "{ extern void winback_hud_end(uint8_t*); winback_hud_end(rdram); }"
+
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.

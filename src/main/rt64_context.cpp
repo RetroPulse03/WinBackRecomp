@@ -162,6 +162,8 @@ void apply_user_config(RT64::Application* app, const R::GraphicsConfig& cfg) {
         case R::AspectRatio::Manual: app->userConfig.aspectRatio = UC::AspectRatio::Manual; break;
         default:                     app->userConfig.aspectRatio = UC::AspectRatio::Original; break;
     }
+    // Extended GBI origins (the HUD's edge anchors, src/game/hud.cpp) at the edges of the widened picture.
+    app->userConfig.extAspectRatio = app->userConfig.aspectRatio == UC::AspectRatio::Original ? UC::AspectRatio::Original : UC::AspectRatio::Expand;
     switch (cfg.msaa_option) {
         case R::Antialiasing::MSAA2X: app->userConfig.antialiasing = UC::Antialiasing::MSAA2X; break;
         case R::Antialiasing::MSAA4X: app->userConfig.antialiasing = UC::Antialiasing::MSAA4X; break;
