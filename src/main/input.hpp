@@ -26,11 +26,13 @@ namespace winback::input {
     // to settings.json. The keyboard's keys are fixed.
 
     // What a controller button presses.
-    enum class Bind : uint8_t { None, A, B, Z, R, L, Start, CUp, CDown, CLeft, CRight, DUp, DDown, DLeft, DRight, CameraReset, Count };
+    // LookLeft and LookRight turn the view that way: they press whichever of
+    // C-Left/C-Right does that under the game's camera option.
+    enum class Bind : uint8_t { None, A, B, Z, R, L, Start, CUp, CDown, CLeft, CRight, DUp, DDown, DLeft, DRight, CameraReset, LookLeft, LookRight, Count };
     // The controller buttons that can be bound, in the menu's order.
     enum PadInput { PadA, PadB, PadX, PadY, PadLB, PadRB, PadLT, PadRT, PadStart, PadL3, PadR3, PadDUp, PadDDown, PadDLeft, PadDRight, PadCount };
-    // Camera: left and right turn the camera by how far the stick is pushed
-    // (C-Left/C-Right for anything that reads buttons). CButtons: all four
+    // Camera: left and right turn the view that way by how far the stick is
+    // pushed (as LookLeft/LookRight for anything that reads buttons). CButtons: all four
     // directions press the C buttons.
     enum class RightStick { Camera, CButtons, None, Count };
     // AB: in the game's menus A confirms and B goes back, whatever they do in

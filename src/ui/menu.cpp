@@ -135,7 +135,7 @@ static_assert(std::size(preset_names) == size_t(In::Preset::Count));
 const char* const bind_names[] = {
     "None", "A (Action)", "B (Reload)", "Z (Crouch)", "R (Aim)", "L", "Start (Pause)",
     "C-Up (Weapon)", "C-Down (Lock On)", "C-Left (Camera)", "C-Right (Camera)",
-    "D-Up", "D-Down (C4)", "D-Left", "D-Right", "Camera Behind",
+    "D-Up", "D-Down (C4)", "D-Left", "D-Right", "Camera Behind", "Look Left", "Look Right",
 };
 static_assert(std::size(bind_names) == size_t(In::Bind::Count));
 const char* const stick_names[] = {"Camera", "C Buttons", "None"};
@@ -696,7 +696,8 @@ void rebuild_controls(const State& s) {
     }
     else if (i < ControlsRightStick) {
         note = "The game button this controller button presses. Camera Behind turns the camera to face the way"
-               " the player faces.";
+               " the player faces. Look Left and Look Right turn the view that way, whichever way the game's"
+               " camera option turns C-Left and C-Right.";
     }
     else if (i == ControlsRightStick) {
         note = "Camera - Turns the camera by how far the stick is pushed.<br/><br/>"

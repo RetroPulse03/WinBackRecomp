@@ -57,7 +57,7 @@ Requirements: 64-bit Windows 10 or 11 and a GPU with Vulkan support.
 | Y | Lock on | C-Down |
 | LB | Crouch | Z |
 | RB | Aim | R |
-| LT / RT, right stick | Turn camera | C-Right / C-Left |
+| LT / RT, right stick | Look left / right | C-Left / C-Right |
 | Right stick click | Camera behind player | C-Left/C-Right twice |
 | D-pad down | Place / detonate C4 | D-Down |
 | Start | Pause | Start |

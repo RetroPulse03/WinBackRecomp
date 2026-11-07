@@ -48,6 +48,8 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Bind, {
     {Bind::DLeft, "DLeft"},
     {Bind::DRight, "DRight"},
     {Bind::CameraReset, "CameraReset"},
+    {Bind::LookLeft, "LookLeft"},
+    {Bind::LookRight, "LookRight"},
 });
 
 NLOHMANN_JSON_SERIALIZE_ENUM(RightStick, {
@@ -136,11 +138,26 @@ bool in_gameplay() {
 uint32_t scripted_pad = 0;
 bool scripted_pad_used = false;
 
-// The N64 buttons each Bind presses (none for None and CameraReset).
+// The N64 buttons each Bind presses (none for None and CameraReset; LookLeft
+// and LookRight depend on the game's camera option, see look_buttons).
 constexpr uint16_t bind_masks[] = {
     0, BTN_A, BTN_B, BTN_Z, BTN_R, BTN_L, BTN_START, BTN_CU, BTN_CD, BTN_CL, BTN_CR,
-    BTN_DU, BTN_DD, BTN_DL, BTN_DR, 0,
+    BTN_DU, BTN_DD, BTN_DL, BTN_DR, 0, 0, 0,
 };
+
+// Whether C-Right turns the view left for each controller: the game's own
+// camera option (bit 1 of D_8015D6AC clear; it's set by default, so C-Left
+// looks left), reported each frame by the camera update (winback_camera_stick).
+std::array<std::atomic<bool>, max_players> c_right_looks_left{};
+
+struct LookButtons {
+    uint16_t left, right;
+};
+
+LookButtons look_buttons(int player) {
+    return c_right_looks_left[player].load(std::memory_order_relaxed) ? LookButtons{BTN_CR, BTN_CL}
+                                                                      : LookButtons{BTN_CL, BTN_CR};
+}
 static_assert(std::size(bind_masks) == size_t(Bind::Count));
 
 // Each PadInput's bit in PadState::pad_buttons.
@@ -186,6 +203,8 @@ PadState read_controller(SDL_GameController* c, int player, const Layout& layout
         }
         snap |= b == Bind::CameraReset;
         s.buttons |= bind_masks[size_t(b)];
+        if (b == Bind::LookLeft) s.buttons |= look_buttons(player).left;
+        if (b == Bind::LookRight) s.buttons |= look_buttons(player).right;
     }
     // Camera behind the player: once per press, during play.
     if (snap && !rear_snap_held[player] && play) {
@@ -196,13 +215,11 @@ PadState read_controller(SDL_GameController* c, int player, const Layout& layout
     s.right_y = -axis(c, SDL_CONTROLLER_AXIS_RIGHTY);
     switch (layout.right_stick) {
         case RightStick::Camera:
-            // The game's C-Right swings the camera around the player to the
-            // right, which turns the view left; stick right should turn it
-            // right, so it acts as C-Left.
-            s.cam_x = -s.right_x;
+            // Stick right turns the view right.
+            s.cam_x = s.right_x;
             s.cam_y = s.right_y;
-            if (s.cam_x > 0.5f) s.cam_buttons |= BTN_CR;
-            if (s.cam_x < -0.5f) s.cam_buttons |= BTN_CL;
+            if (s.cam_x > 0.5f) s.cam_buttons |= look_buttons(player).right;
+            if (s.cam_x < -0.5f) s.cam_buttons |= look_buttons(player).left;
             break;
         case RightStick::CButtons:
             if (s.right_x > 0.5f) s.buttons |= BTN_CR;
@@ -340,8 +357,8 @@ void apply_autopress(PadState& s) {
                 case AUTO_SR: s.x = 1.0f; break;
                 case AUTO_RU: s.cam_y = s.right_y = 1.0f; break;
                 case AUTO_RD: s.cam_y = s.right_y = -1.0f; break;
-                case AUTO_RL: s.right_x = -1.0f; s.cam_x = 1.0f; break;
-                case AUTO_RR: s.right_x = 1.0f; s.cam_x = -1.0f; break;
+                case AUTO_RL: s.cam_x = s.right_x = -1.0f; break;
+                case AUTO_RR: s.cam_x = s.right_x = 1.0f; break;
                 default: break;
             }
         }
@@ -355,13 +372,16 @@ extern "C" void winback_set_gameplay_input(int active) {
     gameplay_input.store(active != 0, std::memory_order_relaxed);
 }
 
-// Called by the game thread's camera update: the right stick's X position for
-// analog camera turning, or 0 while C-Left/C-Right is pressed some other way
-// (triggers, keyboard, scripted presses), so that those turn at full speed.
-extern "C" float winback_camera_stick(int controller_num) {
+// Called by the game thread's camera update, which says whether C-Left turns
+// the view left under the game's camera option: the right stick's X position
+// for analog camera turning (positive turns the view right), or 0 while
+// C-Left/C-Right is pressed some other way (triggers, keyboard, scripted
+// presses), so that those turn at full speed.
+extern "C" float winback_camera_stick(int controller_num, int c_left_left) {
     if (controller_num < 0 || controller_num >= max_players) {
         return 0.0f;
     }
+    c_right_looks_left[controller_num].store(c_left_left == 0, std::memory_order_relaxed);
     std::lock_guard lock{state_mutex};
     const PadState& p = pads[controller_num];
     return (p.buttons & (BTN_CL | BTN_CR)) ? 0.0f : p.cam_x;
@@ -529,9 +549,8 @@ winback::input::Layout winback::input::preset_layout(Preset preset) {
         l.buttons[PadY] = Bind::CDown;
         l.buttons[PadLB] = Bind::Z;
         l.buttons[PadRB] = Bind::R;
-        // The triggers turn the view their way (C-Right turns it left).
-        l.buttons[PadLT] = Bind::CRight;
-        l.buttons[PadRT] = Bind::CLeft;
+        l.buttons[PadLT] = Bind::LookLeft;
+        l.buttons[PadRT] = Bind::LookRight;
         l.buttons[PadR3] = Bind::CameraReset;
         l.right_stick = RightStick::Camera;
         l.menus = MenuButtons::AB;
