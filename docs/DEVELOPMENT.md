@@ -150,7 +150,9 @@ RT64's frame interpolation is off (`RefreshRate::Original` in `display.cpp`). It
 
 Crop Overscan and Integer Scale go to RT64 through `winback::set_framing` (`rt64_context.cpp`), which applies them at the next screen update on the graphics thread. WinBack clears and draws only `(14,14)-(305,229)` of its 320x240 framebuffer (the full-screen FILLRECTs in a `WINBACK_DLDUMP` log) and leaves the border black for a TV's overscan to hide. Crop Overscan leaves out exactly that border, so 292x216 pixels are shown, and the Resolution labels show 216 lines per step instead of 240.
 
-Widescreen sets RT64's Manual aspect ratio to a fixed 16:9 (not the window's shape), so Crop Overscan and Integer Scale apply to the wider picture unchanged. Still to do: the HUD stays in the centre 4:3, objects near the sides may be culled by the game, and cutscenes are widened too.
+Widescreen sets RT64's Manual aspect ratio to a fixed 16:9 (not the window's shape), so Crop Overscan and Integer Scale apply to the wider picture unchanged. Still to do: the HUD stays in the centre 4:3, and cutscenes are widened too.
+
+Widescreen is a feature the original never had, so unlike rendering fixes it may hook game code. The game hides objects outside a horizontal angle fixed for 4:3 (`func_80028BB4`, see WinBack Data's rendering notes). A hook where that angle is built (`0x80028F1C`) widens it in widescreen by the ratio of the 16:9 and 4:3 half angles (`winback_view_test_k` in `display.cpp`), for views RT64 widens: one view, or the two-view split. Four-way split views aren't widened.
 
 Changing anti-aliasing during gameplay could stop rendering for good (RT64 deadlock, fixed by `rt64/0003-msaa-change-deadlock.patch`). A rendering stop seen once after a resolution change went through the same wait and was probably the same bug. To diagnose a stuck renderer, attach lldb (`lldb --batch -p <pid> -o "bt all"`) and look at the `RT64 Present` and workload threads.
 
@@ -231,7 +233,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** remapping, the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; Widescreen widens the 3D, with the HUD, side culling and cutscenes still to do.
+3. **Settings:** remapping, the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; Widescreen widens the 3D and the game's view test, with the HUD and cutscenes still to do.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
 5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, widescreen, split-screen and custom characters.
 6. **Linux build.**

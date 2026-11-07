@@ -59,6 +59,16 @@ func = "func_80035970"
 before_vram = 0x80035B0C
 text = "{ extern int winback_camera_analog(uint8_t*, recomp_context*); if (winback_camera_analog(rdram, ctx)) { ctx->r7 = 0; goto L_80035D00; } }"
 
+# --- Widescreen (src/main/display.cpp) -------------------------------------
+
+# View test: objects outside a half angle of fov/2 * $f6 are hidden, with $f6 set for a 4:3 or 8:3 view.
+# Widen it for the 16:9 picture ($f0 holds fov/2 in radians as a double here). Views the renderer
+# widens are those of one view (D_8016A40E & 1, or D_8016A41C & 0x600) or two (D_8016A40E & 2).
+[[patches.hook]]
+func = "func_80028BB4"
+before_vram = 0x80028F1C
+text = "{ extern float winback_view_test_k(float, double, int); int widened = (MEM_BU(0, 0xFFFFFFFF8016A40EULL) & 3) || (MEM_HU(0, 0xFFFFFFFF8016A41CULL) & 0x600); ctx->f6.fl = winback_view_test_k(ctx->f6.fl, ctx->f0.d, widened); }"
+
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.

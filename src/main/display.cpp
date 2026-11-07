@@ -6,6 +6,8 @@
 // the window borderless (covering the monitor) or exclusive full screen
 // (owning the monitor at its desktop resolution).
 
+#include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -34,6 +36,8 @@ namespace {
 
 std::mutex settings_mutex;
 Settings settings;
+// Read by the game thread every time an object is tested for visibility.
+std::atomic<bool> widescreen_on = false;
 // What F11 switches to from windowed.
 WindowMode last_fullscreen = WindowMode::Borderless;
 bool forced_fullscreen = false;
@@ -94,9 +98,25 @@ void apply_renderer(const Settings& s, bool developer) {
     cfg.msaa_option = s.antialiasing;
     R::set_graphics_config(cfg);
     winback::set_framing(s.crop_overscan, s.integer_scale);
+    widescreen_on = s.widescreen;
 }
 
 } // namespace
+
+// Hook in the game's view test (func_80028BB4): the objects it hides are those outside a horizontal half
+// angle of half_fov * k, where k is fixed for a 4:3 view (8:3 for two-player split screen). In widescreen
+// a view the renderer widens is 4/3 times as wide, so k grows by the ratio of the true half angles,
+// keeping the game's own margin. Four-way split views aren't widened by the renderer and stay as they are.
+extern "C" float winback_view_test_k(float k, double half_fov, int widened) {
+    if (!widescreen_on || !widened) {
+        return k;
+    }
+    // k is about 1.2 for a 4:3 view and 2.0 for an 8:3 one, plus 0.2 for some cameras.
+    double aspect = k > 1.9f ? 8.0 / 3.0 : 4.0 / 3.0;
+    double t = std::tan(half_fov);
+    double scale = std::atan(t * aspect * (4.0 / 3.0)) / std::atan(t * aspect);
+    return float(k * scale);
+}
 
 void load(bool developer, bool force_fullscreen) {
     Settings s;
