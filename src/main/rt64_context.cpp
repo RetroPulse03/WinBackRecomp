@@ -110,6 +110,10 @@ void dump_rects(const uint8_t* rdram, uint32_t dl) {
                 }
                 break;
             case 0xF6: log_rect("FILLRECT", w0, w1); break;
+            case 0xED: // G_SETSCISSOR
+                std::fprintf(stderr, "[dl %u] SCISSOR (%u,%u)-(%u,%u)\n", frame,
+                    ((w0 >> 12) & 0xFFF) / 4, (w0 & 0xFFF) / 4, ((w1 >> 12) & 0xFFF) / 4, (w1 & 0xFFF) / 4);
+                break;
         }
     }
 }
@@ -152,6 +156,7 @@ void apply_user_config(RT64::Application* app, const R::GraphicsConfig& cfg) {
             app->userConfig.downsampleMultiplier = 1;
             break;
     }
+    app->userConfig.aspectTarget = 16.0 / 9.0;
     switch (cfg.ar_option) {
         case R::AspectRatio::Expand: app->userConfig.aspectRatio = UC::AspectRatio::Expand; break;
         case R::AspectRatio::Manual: app->userConfig.aspectRatio = UC::AspectRatio::Manual; break;

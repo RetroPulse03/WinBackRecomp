@@ -48,6 +48,7 @@ void save(const Settings& s) {
     j["window_mode"] = s.window_mode;
     j["resolution"] = s.resolution;
     j["antialiasing"] = s.antialiasing;
+    j["widescreen"] = s.widescreen;
     j["crop_overscan"] = s.crop_overscan;
     j["integer_scale"] = s.integer_scale;
     std::ofstream out(settings_path());
@@ -87,9 +88,9 @@ void apply_renderer(const Settings& s, bool developer) {
     R::GraphicsConfig cfg = R::get_graphics_config();
     cfg.developer_mode = developer;
     cfg.res_option = s.resolution;
-    // Always 4:3. Widescreen is hidden until the game's 16:9 view has been worked on: the extra
-    // area at the sides is never cleared, so old frames show through there.
-    cfg.ar_option = R::AspectRatio::Original;
+    // Widescreen is a fixed 16:9 (RT64's Manual ratio), not the window's shape, so crop and integer
+    // scale work on the same picture in any window.
+    cfg.ar_option = s.widescreen ? R::AspectRatio::Manual : R::AspectRatio::Original;
     cfg.msaa_option = s.antialiasing;
     R::set_graphics_config(cfg);
     winback::set_framing(s.crop_overscan, s.integer_scale);
@@ -106,6 +107,7 @@ void load(bool developer, bool force_fullscreen) {
             s.window_mode = j.value("window_mode", s.window_mode);
             s.resolution = j.value("resolution", s.resolution);
             s.antialiasing = j.value("antialiasing", s.antialiasing);
+            s.widescreen = j.value("widescreen", s.widescreen);
             s.crop_overscan = j.value("crop_overscan", s.crop_overscan);
             s.integer_scale = j.value("integer_scale", s.integer_scale);
         }

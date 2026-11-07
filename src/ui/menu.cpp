@@ -51,7 +51,7 @@ const char* const restart_items[] = {"RESTART", "CANCEL"};
 
 // Display screen rows. Each option's values are its enum's values in order;
 // OFF/ON options are bools.
-enum DisplayItem { DisplayWindowMode, DisplayResolution, DisplayCrop, DisplayInteger, DisplayAntialiasing };
+enum DisplayItem { DisplayWindowMode, DisplayResolution, DisplayWidescreen, DisplayCrop, DisplayInteger, DisplayAntialiasing };
 struct DisplayOption {
     const char* name;
     const char* note;
@@ -65,6 +65,8 @@ const DisplayOption display_options[] = {
     {"RESOLUTION", "How sharply 3D is drawn. ORIGINAL keeps the N64's look: 240 lines, or 216 with the"
                    " overscan cropped. DOUBLE draws twice as many. MATCH WINDOW draws at the window's size.",
      {"ORIGINAL", "DOUBLE", "MATCH WINDOW"}},
+    {"WIDESCREEN", "ON shows a 16:9 picture with more of the world at the sides. OFF keeps the N64's 4:3.",
+     {"OFF", "ON"}},
     {"CROP OVERSCAN", "WinBack leaves a black border around its picture, which old TVs hid past the edge"
                       " of the screen. ON cuts the border off so the picture fills more of the window.",
      {"OFF", "ON"}},
@@ -79,6 +81,7 @@ int display_value(const winback::display::Settings& d, int option) {
     switch (option) {
         case DisplayWindowMode: return int(d.window_mode);
         case DisplayResolution: return int(d.resolution);
+        case DisplayWidescreen: return int(d.widescreen);
         case DisplayCrop: return int(d.crop_overscan);
         case DisplayInteger: return int(d.integer_scale);
         default: return int(d.antialiasing);
@@ -102,6 +105,7 @@ void set_display_value(winback::display::Settings& d, int option, int value) {
     switch (option) {
         case DisplayWindowMode: d.window_mode = winback::display::WindowMode(value); break;
         case DisplayResolution: d.resolution = R::Resolution(value); break;
+        case DisplayWidescreen: d.widescreen = value != 0; break;
         case DisplayCrop: d.crop_overscan = value != 0; break;
         case DisplayInteger: d.integer_scale = value != 0; break;
         default: d.antialiasing = R::Antialiasing(value); break;

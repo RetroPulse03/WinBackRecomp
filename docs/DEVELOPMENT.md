@@ -51,7 +51,7 @@ These environment variables are read at startup.
 | `WINBACK_DEBUG=1` | Prints per-second task counts and, every 5 seconds, OSThread states (plus call traces when `trace_mode` is on). Opens a console. |
 | `WINBACK_WATCH=8011xxxx,...` | Adds memory words to the periodic dump. |
 | `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons and sticks. `r@31+14` holds R for 14 seconds. `su sd sl sr` and `ru rd rl rr` push the left and right sticks fully over. `pad_a pad_b pad_x pad_y pad_lb pad_rb pad_lt pad_rt pad_dl pad_dr pad_dd pad_start` press the controller's own buttons, which go through the current layout. |
-| `WINBACK_DLDUMP=1` | Logs every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
+| `WINBACK_DLDUMP=1` | Logs every scissor, and every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
 | `WINBACK_GFX_API=d3d12` | Uses Direct3D 12 instead of Vulkan. |
 | `WINBACK_JUMP=5@20,12.1@60` | Level Select jumps at the given seconds: stage 5's start at 20 s, then stage 12's first checkpoint at 60 s. Stages count from 0 here and in checkpoint file names. The menu shows them from 1, as the game's own stage list does. |
 | `WINBACK_LEVELLOG=1` | Prints the stage, map, checkpoint and the player's position twice a second. |
@@ -130,6 +130,7 @@ Changes to dependencies live in `patches/<dep>/*.patch`. `tools/fetch_deps.sh` a
 | `rt64/0003-msaa-change-deadlock.patch` | Changing anti-aliasing or the resolution makes the workload thread wait until the present thread has shown the previous frame's interpolated frames, before it destroys their targets. With MSAA, frames can be left unshown (for example when two workloads share one present), and the present thread then waits on the workload thread: rendering stopped for good. The workload thread now also stops waiting once the present thread has moved on to the current workload's present. It waits without holding the configuration lock, which the present thread needs. |
 | `rt64/0004-per-pixel-noise-seed.patch` | The laser sight uses a dithered alpha compare (`G_AC_DITHER`). RT64 seeded each pixel's noise with `instanceIndex * y * x`, which is 0 for every pixel of a workload's first draw call. The laser is the first draw of its own task, so the whole line passed or failed together and flickered. The seed now mixes each pixel's position with the instance index. |
 | `rt64/0005-crop-and-integer-scale.patch` | Adds `UserConfiguration::framing`: margins of the VI picture (in 640x480 VI coordinates) to leave out, and integer scaling. `VIRenderer::getViewportAndScissor` fits the remaining area to the window, centered; with integer scaling each framebuffer row covers the same whole number of window rows. `WindowIntegerScale` resolution counts only the lines left after cropping. This is presentation only, like a TV's overscan, and the game's rendering is unchanged. |
+| `rt64/0006-widen-overscan-picture.patch` | In widescreen, RT64 widens only draws whose scissor spans the framebuffer's whole scissor. WinBack draws its 3D and clears in `(14,14)-(306,230)` under a full-screen `(0,0)-(320,240)` scissor, so its 3D stayed 4:3 while the laser (full scissor) was widened into an uncleared area. Spans within 16 pixels of both sides now count as full width, both where draws are widened (`rt64_framebuffer_renderer.cpp`) and where the projection is corrected for the wider shape (`rt64_projection_processor.cpp`); the two checks must match or the 3D stretches. |
 
 RT64's frame interpolation is off (`RefreshRate::Original` in `display.cpp`). It treats each task as a frame, and WinBack draws each frame with two tasks (the scene, then the laser sight), so interpolated frames drew the laser inconsistently.
 
@@ -149,7 +150,7 @@ RT64's frame interpolation is off (`RefreshRate::Original` in `display.cpp`). It
 
 Crop Overscan and Integer Scale go to RT64 through `winback::set_framing` (`rt64_context.cpp`), which applies them at the next screen update on the graphics thread. WinBack clears and draws only `(14,14)-(305,229)` of its 320x240 framebuffer (the full-screen FILLRECTs in a `WINBACK_DLDUMP` log) and leaves the border black for a TV's overscan to hide. Crop Overscan leaves out exactly that border, so 292x216 pixels are shown, and the Resolution labels show 216 lines per step instead of 240.
 
-The aspect ratio is fixed at 4:3. The Widescreen option is hidden until the game's 16:9 view has been worked on: the area beyond 4:3 is never cleared, so old frames (laser lines) stay there.
+Widescreen sets RT64's Manual aspect ratio to a fixed 16:9 (not the window's shape), so Crop Overscan and Integer Scale apply to the wider picture unchanged. Still to do: the HUD stays in the centre 4:3, objects near the sides may be culled by the game, and cutscenes are widened too.
 
 Changing anti-aliasing during gameplay could stop rendering for good (RT64 deadlock, fixed by `rt64/0003-msaa-change-deadlock.patch`). A rendering stop seen once after a resolution change went through the same wait and was probably the same bug. To diagnose a stuck renderer, attach lldb (`lldb --batch -p <pid> -o "bt all"`) and look at the `RT64 Present` and workload threads.
 
@@ -230,7 +231,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** remapping, the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; widescreen is hidden until it is worked on.
+3. **Settings:** remapping, the graphics API, audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) is done; Widescreen widens the 3D, with the HUD, side culling and cutscenes still to do.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
 5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, widescreen, split-screen and custom characters.
 6. **Linux build.**

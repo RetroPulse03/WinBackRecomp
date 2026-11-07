@@ -14,6 +14,7 @@ namespace winback::display {
         WindowMode window_mode = WindowMode::Windowed;
         ultramodern::renderer::Resolution resolution = ultramodern::renderer::Resolution::Auto;
         ultramodern::renderer::Antialiasing antialiasing = ultramodern::renderer::Antialiasing::MSAA2X;
+        bool widescreen = false;
         bool crop_overscan = false;
         bool integer_scale = false;
     };

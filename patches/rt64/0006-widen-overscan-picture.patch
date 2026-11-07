@@ -1,0 +1,62 @@
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index c4cf1bf..ee2f321 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1470,6 +1470,14 @@ namespace RT64 {
+         const float extOriginPercentage = p.extAspectPercentage;
+         RenderViewport rawViewportWide(0.0f, 0.0f, wideWidth, commonHeight);
+         RenderViewport rawViewportOriginal(0.0f, 0.0f, originalWidth, commonHeight);
++
++        // Games may draw their picture a few pixels inside the framebuffer's full scissor, leaving a border for
++        // the TV's overscan (WinBack clears and draws in (14,14)-(306,230) under a (0,0)-(320,240) scissor).
++        // A span that reaches within this margin of both sides counts as full width, so the picture widens.
++        const int32_t OverscanMargin = 16 << 2;
++        auto spansScissorWidth = [&](int32_t ulx, int32_t lrx) {
++            return (ulx <= fbPair.scissorRect.ulx + OverscanMargin) && (lrx >= fbPair.scissorRect.lrx - OverscanMargin);
++        };
+         uint32_t vertexTestZFaceIndicesStart = 0;
+         int32_t vertexTestZCallIndex = -1;
+         for (uint32_t pr = 0; (pr < fbPair.projectionCount) && (globalCallIndex < p.maxGameCall); pr++) {
+@@ -1531,7 +1539,7 @@ namespace RT64 {
+                     fixedRect = fixRect(call.callDesc.rect, fbPair.scissorRect, p.fixRectLR);
+ 
+                     // A rect that spans the whole width of the scissor.
+-                    if ((fixedRect.ulx <= fbPair.scissorRect.ulx) && (fixedRect.lrx >= fbPair.scissorRect.lrx)) {
++                    if (spansScissorWidth(fixedRect.ulx, fixedRect.lrx)) {
+                         invRatioScale = 1.0f;
+                     }
+                     // A regular rectangle that should correct its misalignment.
+@@ -1628,7 +1636,7 @@ namespace RT64 {
+                             bool useWideViewport = false;
+                             if (proj.type == Projection::Type::Perspective) {
+                                 // The call's scissor spans the whole width of the framebuffer pair scissor. The viewport must not be using an extended origin.
+-                                useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && (call.callDesc.scissorRect.ulx <= fbPair.scissorRect.ulx) && (call.callDesc.scissorRect.lrx <= fbPair.scissorRect.lrx);
++                                useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && spansScissorWidth(call.callDesc.scissorRect.ulx, call.callDesc.scissorRect.lrx);
+                             }
+                             else {
+                                 // Always use the wide viewport with orthographic projections.
+@@ -1658,7 +1666,7 @@ namespace RT64 {
+ 
+                             // The call's scissor spans the whole width of the framebuffer pair scissor. The rect must not be using extended origins.
+                             const bool regularOrigins = (call.callDesc.rectLeftOrigin == G_EX_ORIGIN_NONE) && (call.callDesc.rectRightOrigin == G_EX_ORIGIN_NONE);
+-                            const bool coversScissorWidth = regularOrigins && (fixedRect.ulx <= fbPair.scissorRect.ulx) && (fixedRect.lrx >= fbPair.scissorRect.lrx);
++                            const bool coversScissorWidth = regularOrigins && spansScissorWidth(fixedRect.ulx, fixedRect.lrx);
+                             if (tileCopiesUsed || coversScissorWidth) {
+                                 invRatioScale = 1.0f;
+                             }
+diff --git a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
+index 10a01cd..375bd70 100644
+--- a/src/render/rt64_projection_processor.cpp
++++ b/src/render/rt64_projection_processor.cpp
+@@ -69,7 +69,10 @@ namespace RT64 {
+             bool stretchAspectRatio = false;
+             if (useScissorDetection) {
+                 if (!proj.scissorRect.isNull()) {
+-                    bool coversWholeWidth = (proj.scissorRect.ulx <= fbPair.scissorRect.ulx) && (proj.scissorRect.lrx >= fbPair.scissorRect.lrx);
++                    // Within a TV overscan border of both sides counts as the whole width; this must match
++                    // spansScissorWidth in the framebuffer renderer, which widens the same draws.
++                    const int32_t OverscanMargin = 16 << 2;
++                    bool coversWholeWidth = (proj.scissorRect.ulx <= fbPair.scissorRect.ulx + OverscanMargin) && (proj.scissorRect.lrx >= fbPair.scissorRect.lrx - OverscanMargin);
+                     bool horizontalRatio = (proj.scissorRect.width(true, true) > proj.scissorRect.height(true, true));
+                     stretchAspectRatio = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
+                 }
