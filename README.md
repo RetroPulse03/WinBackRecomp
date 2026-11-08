@@ -12,7 +12,7 @@ A native PC port of **WinBack: Covert Operations** (N64, USA), made by static re
 
 ## Status
 
-**v0.3.** The game plays from boot, through the intros, title screen and Controller Pak save, into the first mission at 60 fps. Mission 1 has been play-tested by hand, including aiming with the laser sight and playing in widescreen. Later missions haven't been tested much yet.
+**v0.3.** The game plays from boot, through the intros, title screen and Controller Pak save, into the first mission at 30 fps. Mission 1 has been play-tested by hand, including aiming with the laser sight and playing in widescreen. Later missions haven't been tested much yet.
 
 What's in it beyond the original game:
 
