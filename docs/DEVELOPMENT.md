@@ -51,6 +51,7 @@ These environment variables are read at startup.
 | `WINBACK_DEBUG=1` | Prints per-second task counts and, every 5 seconds, OSThread states (plus call traces when `trace_mode` is on). Opens a console. |
 | `WINBACK_WATCH=8011xxxx,...` | Adds memory words to the periodic dump. |
 | `WINBACK_AUTOPRESS=start@6,a@10,...` | Scripts player 1's buttons and sticks. `r@31+14` holds R for 14 seconds. `su sd sl sr` and `ru rd rl rr` push the left and right sticks fully over. `pad_a pad_b pad_x pad_y pad_lb pad_rb pad_lt pad_rt pad_dl pad_dr pad_dd pad_start` press the controller's own buttons, which go through the current layout. |
+| `WINBACK_AUTOPRESS2=start@13,...` | The same for player 2 (N64 buttons and sticks), and port 2 counts as connected. |
 | `WINBACK_DLDUMP=1` | Logs every scissor, and every fill/texture rectangle of 32x32 or larger with its combiner, other modes and texture. |
 | `WINBACK_HUDLOG=1` | Logs, once a second per part, the rectangles each part of the gameplay HUD draws, and the player camera's mode when it changes. |
 | `WINBACK_GFX_API=d3d12` | Uses Direct3D 12 instead of Vulkan. |
@@ -167,7 +168,7 @@ The gameplay HUD is anchored to the picture's edges (`src/game/hud.cpp`, hooks i
 - Before each of the camera frame's lines: in camera modes 6 and 8 (fixed area cameras) the corners go to the nearer edge. In mode 9 the same function draws a centred crosshair.
 - Before the closing display list: centre alignment, `gEXPopScissor` (which needs `rt64/0008`) and `gEXDisable`.
 
-A part anchored left is drawn `x` pixels from the widened picture's left edge, and one anchored right `x - 320` from its right edge. Both also move 14/3 pixels outwards, because the 14-pixel overscan border around the 3D is widened to 14 × 4/3, so each part keeps its distance from the 3D picture's edge. `extAspectRatio` is Expand in widescreen so the origins are the picture's edges. `func_800D20CC` draws nothing in split screen (`D_8016A40E & 1` clear); whether another function draws a split-screen HUD hasn't been checked. 2D drawn by other objects, such as text and menus, stays centred.
+A part anchored left is drawn `x` pixels from the widened picture's left edge, and one anchored right `x - 320` from its right edge. Both also move 14/3 pixels outwards, because the 14-pixel overscan border around the 3D is widened to 14 × 4/3, so each part keeps its distance from the 3D picture's edge. `extAspectRatio` is Expand in widescreen so the origins are the picture's edges. `func_800D20CC` draws nothing in split screen (`D_8016A40E & 1` clear). Versus draws each view's HUD with `func_800B4FD4(player)`, which gets the same treatment in the two-view split: ammo left, life and the counters after it right, the markers centred. The four-view split isn't widened, so its HUD is left alone. 2D drawn by other objects, such as text and menus, stays centred.
 
 Changing anti-aliasing during gameplay could stop rendering for good (RT64 deadlock, fixed by `rt64/0003-msaa-change-deadlock.patch`). A rendering stop seen once after a resolution change went through the same wait and was probably the same bug. To diagnose a stuck renderer, attach lldb (`lldb --batch -p <pid> -o "bt all"`) and look at the `RT64 Present` and workload threads.
 
@@ -250,7 +251,7 @@ Releases are installed by [RecompLauncher](https://recomplauncher.com/sdk) and [
 
 1. **Menu polish:** the game's own plate textures and lettering read from the ROM at run time, pausing the game while the menu is open, and mouse support. Level Select (Select opens it at any time) is done.
 2. **Soak testing:** play through the game in short sessions using Level Select, patching new spin loops and fixing rendering bugs as they turn up. One crash has been reported while shooting the first enemy in mission 1 but hasn't been reproduced. Verify audio pitch and stereo (`audio.cpp` swaps the channels).
-3. **Settings:** the graphics API and audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) and Controls (controller presets and custom buttons) are done; Widescreen widens the 3D and the game's view test and anchors the HUD to the edges; still to do are cutscenes kept at 4:3 and checking the split-screen HUD.
+3. **Settings:** the graphics API and audio, added to the same menu. Display (window mode, resolution, anti-aliasing, Crop Overscan, Integer Scale) and Controls (controller presets and custom buttons) are done; Widescreen widens the 3D and the game's view test and anchors the HUD to the edges; still to do are cutscenes kept at 4:3.
 4. **Continuous integration:** a GitHub Actions build on `windows-latest`. The ROM can't be used in CI, so this needs the approach other N64Recomp projects use for generated sources.
 5. **Mods:** the Mods menu, restart, error reporting, file loading and code mods using entry hooks are done (see [Mods](#mods)). Next: texture packs, replacing game files, split-screen and custom characters.
 6. **Linux build.**

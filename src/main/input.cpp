@@ -269,6 +269,8 @@ PadState read_keyboard() {
 // and the right stick ru rd rl rr (held fully over). The controller's own
 // buttons, which go through the current layout: pad_a pad_b pad_x pad_y pad_lb
 // pad_rb pad_lt pad_rt pad_dl pad_dr pad_dd pad_start.
+// WINBACK_AUTOPRESS2 does the same for player 2 (N64 buttons and sticks only),
+// and makes port 2 count as connected.
 enum AutoStick : uint16_t { AUTO_SU = 1, AUTO_SD, AUTO_SL, AUTO_SR, AUTO_RU, AUTO_RD, AUTO_RL, AUTO_RR };
 
 struct AutoPress {
@@ -279,9 +281,9 @@ struct AutoPress {
     uint32_t pad = 0;
 };
 
-std::vector<AutoPress> load_autopress() {
+std::vector<AutoPress> load_autopress(int player) {
     std::vector<AutoPress> out;
-    const char* env = std::getenv("WINBACK_AUTOPRESS");
+    const char* env = std::getenv(player == 0 ? "WINBACK_AUTOPRESS" : "WINBACK_AUTOPRESS2");
     if (env == nullptr) {
         return out;
     }
@@ -324,7 +326,7 @@ std::vector<AutoPress> load_autopress() {
                 }
             }
             for (const auto& [n, pad] : pad_names) {
-                if (name == n) {
+                if (name == n && player == 0) {
                     out.push_back({0, 0, when, hold, pad});
                     scripted_pad_used = true;
                 }
@@ -338,10 +340,18 @@ std::vector<AutoPress> load_autopress() {
     return out;
 }
 
-void apply_autopress(PadState& s) {
-    static const std::vector<AutoPress> presses = load_autopress();
+bool scripted_player2() {
+    static const bool on = std::getenv("WINBACK_AUTOPRESS2") != nullptr;
+    return on;
+}
+
+void apply_autopress(PadState& s, int player) {
+    static const std::vector<AutoPress> all_presses[2] = {load_autopress(0), load_autopress(1)};
     static const auto start = std::chrono::steady_clock::now();
-    scripted_pad = 0;
+    const std::vector<AutoPress>& presses = all_presses[player];
+    if (player == 0) {
+        scripted_pad = 0;
+    }
     if (presses.empty()) {
         return;
     }
@@ -349,7 +359,9 @@ void apply_autopress(PadState& s) {
     for (const AutoPress& p : presses) {
         if (t >= p.at && t < p.at + p.hold) {
             s.buttons |= p.mask;
-            scripted_pad |= p.pad;
+            if (player == 0) {
+                scripted_pad |= p.pad;
+            }
             switch (p.stick) {
                 case AUTO_SU: s.y = 1.0f; break;
                 case AUTO_SD: s.y = -1.0f; break;
@@ -428,8 +440,12 @@ void winback::input::poll() {
     }
     std::array<PadState, max_players> next{};
     next[0] = read_keyboard();
-    apply_autopress(next[0]);
+    apply_autopress(next[0], 0);
     next[0].other_buttons = next[0].buttons;
+    if (max_players > 1 && scripted_player2()) {
+        apply_autopress(next[1], 1);
+        next[1].other_buttons = next[1].buttons;
+    }
     for (int i = 0; i < max_players; i++) {
         if (controllers[i] == nullptr && (i != 0 || !scripted_pad_used)) {
             continue;
@@ -514,7 +530,7 @@ void winback::input::set_rumble(int controller_num, bool rumble) {
 
 ultramodern::input::connected_device_info_t winback::input::get_device_info(int controller_num) {
     // Port 1 is always connected (keyboard); other ports need a gamepad.
-    bool connected = controller_num == 0 ||
+    bool connected = controller_num == 0 || (controller_num == 1 && scripted_player2()) ||
         (controller_num < max_players && controllers[controller_num] != nullptr);
     return {
         .connected_device = connected ? ultramodern::input::Device::Controller : ultramodern::input::Device::None,

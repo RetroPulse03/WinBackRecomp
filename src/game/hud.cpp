@@ -187,11 +187,33 @@ void log_begin(const uint8_t* rdram, Part part) {
     log_start = rd_w(rdram, dl_pointer);
 }
 
+// RT64 clips rectangles to the scissor, which it also keeps in the centre 4:3, so the scissor is
+// widened to the whole picture while the HUD is drawn. A pop at the end brings back the view's own.
+void begin(uint8_t* rdram, bool widened) {
+    current_anchor = Anchor::Centre;
+    active = widened && winback_widescreen_on() != 0;
+    if (!active) {
+        return;
+    }
+    emit(rdram, ex_hook, (1u << 28) | ex_opcode); // gEXEnable
+    emit(rdram, ex(ex_pushscissor), 0);
+    emit(rdram, ex(ex_setscissor), 0 /* G_SC_NON_INTERLACE */ | (uint32_t(origin_left) << 2) | (uint32_t(origin_right) << 14));
+    emit(rdram, pack(0, 0), pack(0, 240 * 4));
+}
+
+void end(uint8_t* rdram) {
+    if (!active) {
+        return;
+    }
+    set_anchor(rdram, Anchor::Centre);
+    emit(rdram, ex(ex_popscissor), 0);
+    emit(rdram, ex_hook, 2u << 28); // gEXDisable
+    active = false;
+}
+
 } // namespace
 
-// Start of func_800D20CC, after its setup display list. RT64 clips rectangles to the scissor, which
-// it also keeps in the centre 4:3, so the scissor is widened to the whole picture while the HUD is
-// drawn. A pop at the end brings back the view's own scissor.
+// Start of func_800D20CC, after its setup display list.
 extern "C" void winback_hud_begin(uint8_t* rdram) {
     if (hudlog_enabled()) {
         static int last_mode = -1;
@@ -201,15 +223,7 @@ extern "C" void winback_hud_begin(uint8_t* rdram) {
             last_mode = mode;
         }
     }
-    current_anchor = Anchor::Centre;
-    active = winback_widescreen_on() != 0;
-    if (!active) {
-        return;
-    }
-    emit(rdram, ex_hook, (1u << 28) | ex_opcode); // gEXEnable
-    emit(rdram, ex(ex_pushscissor), 0);
-    emit(rdram, ex(ex_setscissor), 0 /* G_SC_NON_INTERLACE */ | (uint32_t(origin_left) << 2) | (uint32_t(origin_right) << 14));
-    emit(rdram, pack(0, 0), pack(0, 240 * 4));
+    begin(rdram, true);
 }
 
 // Before each part's call.
@@ -236,11 +250,25 @@ extern "C" void winback_hud_end(uint8_t* rdram) {
     if (hudlog_enabled()) {
         log_finish(rdram);
     }
-    if (!active) {
-        return;
-    }
-    set_anchor(rdram, Anchor::Centre);
-    emit(rdram, ex(ex_popscissor), 0);
-    emit(rdram, ex_hook, 2u << 28); // gEXDisable
-    active = false;
+    end(rdram);
+}
+
+// Versus HUD, func_800B4FD4(player), called from the versus HUD object's draw function for each view.
+// Only the two-view split is widened by RT64, so the four-view layout keeps its parts in place.
+// Ammo (func_800CEC1C) is on the left. The markers that follow (func_800D0B14 and its neighbours,
+// func_800B4E6C) stay in the centre, and life (func_800CF6A8) and the rows of counters drawn after it
+// at x 268-284 go right.
+extern "C" void winback_vs_hud_begin(uint8_t* rdram) {
+    uint8_t modes = rdram[0x16A40E ^ 3];
+    uint16_t state = uint16_t(rd_h(rdram, 0x8016A41C));
+    begin(rdram, !(modes & 1) && !(state & 0x600) && (modes & 2));
+    set_anchor(rdram, Anchor::Left);
+}
+
+extern "C" void winback_vs_hud_anchor(uint8_t* rdram, int anchor) {
+    set_anchor(rdram, Anchor(anchor));
+}
+
+extern "C" void winback_vs_hud_end(uint8_t* rdram) {
+    end(rdram);
 }

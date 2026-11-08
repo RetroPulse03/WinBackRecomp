@@ -192,6 +192,29 @@ func = "func_800D20CC"
 before_vram = 0x800D2384
 text = "{ extern void winback_hud_end(uint8_t*); winback_hud_end(rdram); }"
 
+# Versus HUD, func_800B4FD4(player): the same for the two-view split. Ammo (0x800B4FF4) left, the
+# markers (0x800B4FFC) centre, life and the counters after it (0x800B50FC) right; every path ends at
+# 0x800B53DC. Anchors: 0 centre, 1 left, 2 right.
+[[patches.hook]]
+func = "func_800B4FD4"
+before_vram = 0x800B4FF4
+text = "{ extern void winback_vs_hud_begin(uint8_t*); winback_vs_hud_begin(rdram); }"
+
+[[patches.hook]]
+func = "func_800B4FD4"
+before_vram = 0x800B4FFC
+text = "{ extern void winback_vs_hud_anchor(uint8_t*, int); winback_vs_hud_anchor(rdram, 0); }"
+
+[[patches.hook]]
+func = "func_800B4FD4"
+before_vram = 0x800B50FC
+text = "{ extern void winback_vs_hud_anchor(uint8_t*, int); winback_vs_hud_anchor(rdram, 2); }"
+
+[[patches.hook]]
+func = "func_800B4FD4"
+before_vram = 0x800B53DC
+text = "{ extern void winback_vs_hud_end(uint8_t*); winback_vs_hud_end(rdram); }"
+
 # --- Busy-wait loops -------------------------------------------------------
 # The runtime only switches game threads at OS calls, so loops that poll
 # memory set by another thread get a yield at their head.
