@@ -45,7 +45,7 @@ enum Part {
     PartLife,        // func_800CF6A8: LIFE and the player's health bar, bottom right
     PartAmmo,        // func_800CEC1C: rounds in the magazine, bottom left
     PartWeapon,      // func_800CF7E8: weapon icon and ammo count, bottom left
-    PartAlert,       // func_800CFA9C: indicator at (276,28), top right, that changes with enemies alerted in the room (inferred)
+    PartAlert,       // func_800CFA9C: indicator at (276,28), top right, shown when certain objects are in the player's room (not identified)
     PartSecondLife,  // func_800CF76C: a second health bar at (40,22), top left, drawn while D_801D362C is set
     PartTarget1,     // func_800D0B14 .. func_800D0E54: func_800D0088 draws markers at the projected position
     PartTarget2,     //   of an object the camera or player targets (camera +0x164, D_80138EF8)
