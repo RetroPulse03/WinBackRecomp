@@ -6,6 +6,8 @@ If you love this game, and you don't like AI, then this isn't for you. However, 
 
 # WinBack Recompiled
 
+[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/winbackrecomp)
+
 A native PC port of **WinBack: Covert Operations** (N64, USA), made by static recompilation. The game's MIPS code is translated to C and compiled for x64 using [N64Recomp](https://github.com/N64Recomp/N64Recomp), and [RT64](https://github.com/rt64/rt64) renders it. There is no emulator.
 
 > **No game data is included.** You need your own copy of the game: *WinBack - Covert Operations (USA)*, big-endian `.z64`, SHA-1 `fa04477b321a95e1f7a2edcac5c09bfa6ef72041`.
